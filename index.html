@@ -20,8 +20,8 @@
   --blue:      #4ab8e8;
   --blue-dim:  #0f3a50;
   --red:       #e84040;
-  --text:      #c8d0dc;
-  --text-dim:  #5a6475;
+  --text:      #e8edf5;
+  --text-dim:  #8a96a8;
   --mono:      'Share Tech Mono', monospace;
   --sans:      'Barlow Condensed', sans-serif;
 }
@@ -79,8 +79,8 @@ header{
   background:var(--surface);border-radius:2px;overflow:hidden;
 }
 .tab{
-  flex:1;padding:0.7rem 1rem;
-  font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;
+  flex:1;padding:0.75rem 1rem;
+  font-family:var(--mono);font-size:0.8rem;letter-spacing:0.08em;
   text-transform:uppercase;color:var(--text-dim);
   background:transparent;border:none;cursor:pointer;
   border-right:1px solid var(--border);
@@ -111,7 +111,7 @@ header{
   border-bottom:1px solid var(--border);
 }
 .panel-header h2{
-  font-size:0.7rem;font-family:var(--mono);letter-spacing:0.12em;
+  font-size:0.78rem;font-family:var(--mono);letter-spacing:0.1em;
   text-transform:uppercase;color:var(--amber);font-weight:400;
 }
 .panel-dot{width:5px;height:5px;border-radius:50%;background:var(--amber);flex-shrink:0;}
@@ -140,8 +140,8 @@ header{
 .info-row{display:flex;gap:0.6rem;flex-wrap:wrap;}
 .chip{
   background:rgba(30,36,48,0.8);border:1px solid var(--border);
-  padding:0.3rem 0.7rem;border-radius:2px;
-  font-family:var(--mono);font-size:0.7rem;color:var(--text-dim);
+  padding:0.35rem 0.8rem;border-radius:2px;
+  font-family:var(--mono);font-size:0.8rem;color:var(--text-dim);
   display:flex;align-items:center;gap:0.4rem;
 }
 .chip .val{color:var(--amber);}
@@ -154,16 +154,16 @@ header{
 @media(max-width:600px){.two-col{grid-template-columns:1fr;}}
 .field-group{display:grid;gap:0.35rem;}
 .field-label{
-  font-family:var(--mono);font-size:0.68rem;letter-spacing:0.1em;
+  font-family:var(--mono);font-size:0.78rem;letter-spacing:0.08em;
   text-transform:uppercase;color:var(--text-dim);
   display:flex;align-items:center;gap:0.5rem;
 }
-.field-label .tag{color:var(--amber-dim);font-size:0.6rem;}
-.field-desc{font-size:0.75rem;color:var(--text-dim);font-family:var(--sans);line-height:1.4;margin-bottom:0.2rem;}
+.field-label .tag{color:var(--amber-dim);font-size:0.7rem;}
+.field-desc{font-size:0.88rem;color:var(--text-dim);font-family:var(--sans);line-height:1.5;margin-bottom:0.3rem;}
 select,input[type=text],input[type=number],input[type=password]{
   width:100%;background:var(--bg);border:1px solid var(--border);
-  color:var(--text);font-family:var(--mono);font-size:0.82rem;
-  padding:0.5rem 0.75rem;border-radius:2px;outline:none;transition:border-color 0.15s;
+  color:var(--text);font-family:var(--mono);font-size:0.92rem;
+  padding:0.55rem 0.8rem;border-radius:2px;outline:none;transition:border-color 0.15s;
 }
 select{
   appearance:none;cursor:pointer;
@@ -197,13 +197,13 @@ input[type=number]{width:72px;color:var(--amber);text-align:center;}
   transition:transform 0.2s,background 0.2s;
 }
 .toggle input:checked+.toggle-track::after{transform:translateX(20px);background:var(--green);}
-.toggle-label{font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);}
+.toggle-label{font-family:var(--mono);font-size:0.85rem;color:var(--text-dim);}
 
 /* ── PRESETS ── */
 .presets-row{display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.4rem;}
 .preset-btn{
   background:transparent;border:1px solid var(--border);color:var(--text-dim);
-  font-family:var(--mono);font-size:0.68rem;letter-spacing:0.07em;
+  font-family:var(--mono);font-size:0.78rem;letter-spacing:0.05em;
   padding:0.3rem 0.6rem;cursor:pointer;border-radius:2px;transition:all 0.15s;
   text-transform:uppercase;
 }
@@ -240,7 +240,7 @@ input[type=number]{width:72px;color:var(--amber);text-align:center;}
 }
 .dem-status.visible{display:block;}
 .dem-status-line{
-  font-family:var(--mono);font-size:0.75rem;
+  font-family:var(--mono);font-size:0.85rem;
   display:flex;align-items:center;gap:0.6rem;margin-bottom:0.3rem;
 }
 .dem-status-line:last-child{margin-bottom:0;}
@@ -256,7 +256,7 @@ input[type=number]{width:72px;color:var(--amber);text-align:center;}
 /* ── BUTTONS ── */
 .btn{
   width:100%;background:transparent;border:2px solid var(--amber);
-  color:var(--amber);font-family:var(--mono);font-size:0.85rem;
+  color:var(--amber);font-family:var(--mono);font-size:0.92rem;
   letter-spacing:0.15em;text-transform:uppercase;padding:0.9rem;
   cursor:pointer;border-radius:2px;position:relative;overflow:hidden;transition:color 0.2s,background 0.2s;
 }
@@ -277,7 +277,7 @@ input[type=number]{width:72px;color:var(--amber);text-align:center;}
 .log-panel{display:none;}
 .log-panel.visible{display:block;}
 .log-body{
-  padding:0.8rem 1.1rem;font-family:var(--mono);font-size:0.72rem;
+  padding:0.8rem 1.1rem;font-family:var(--mono);font-size:0.82rem;
   line-height:1.8;max-height:200px;overflow-y:auto;
 }
 .log-line{color:var(--text-dim);}
@@ -295,7 +295,7 @@ input[type=number]{width:72px;color:var(--amber);text-align:center;}
 @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .dl-btn{
   background:var(--green-dim);border:2px solid var(--green);color:var(--green);
-  font-family:var(--mono);font-size:0.85rem;letter-spacing:0.15em;
+  font-family:var(--mono);font-size:0.92rem;letter-spacing:0.15em;
   text-transform:uppercase;padding:0.9rem;cursor:pointer;border-radius:2px;
   transition:background 0.2s;text-decoration:none;display:block;text-align:center;
 }
@@ -1104,7 +1104,7 @@ async function processAndExport() {
     dlDem.textContent = '⬇  Download ' + outDemName;
     dlDem.style.display = 'block';
     document.getElementById('installNote').innerHTML =
-      '<strong style="color:var(--text)">Install DEM on RC Pro:</strong><br>' +
+      '<strong style="color:var(--text);font-size:1rem">Install DEM on RC Pro:</strong><br>' +
       'Copy <code style="color:var(--blue)">' + outDemName + '</code> to<br>' +
       '<code style="color:var(--text-dim)">Internal Storage/DJI/Mission/Elevation/</code><br>' +
       'Then in Pilot 2: Route Settings → Altitude Mode → DSM-based Terrain Follow → select file.';
