@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KMZ Turn Mode Converter · 3DroneMapping</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root {
+    --bg:       #0a0c0f;
+    --surface:  #111318;
+    --border:   #1e2430;
+    --amber:    #e8a030;
+    --amber-dim:#7a521a;
+    --green:    #3ec97a;
+    --green-dim:#1a4a30;
+    --red:      #e84040;
+    --text:     #c8d0dc;
+    --text-dim: #5a6475;
+    --mono:     'Share Tech Mono', monospace;
+    --sans:     'Barlow Condensed', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1rem 4rem;
+    background-image:
+      radial-gradient(ellipse 80% 40% at 50% -10%, rgba(232,160,48,0.07) 0%, transparent 70%),
+      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(30,36,48,0.4) 39px, rgba(30,36,48,0.4) 40px),
+      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(30,36,48,0.2) 39px, rgba(30,36,48,0.2) 40px);
+  }
+
+  /* HEADER */
+  header {
+    width: 100%;
+    max-width: 860px;
+    margin-bottom: 2.5rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1.2rem;
+    display: flex;
+    align-items: flex-end;
+    gap: 1.5rem;
+  }
+  .logo-mark {
+    width: 44px; height: 44px;
+    border: 2px solid var(--amber);
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .logo-mark::before {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    border: 1px solid rgba(232,160,48,0.3);
+  }
+  .logo-mark svg { width: 22px; height: 22px; fill: var(--amber); }
+  .header-text h1 {
+    font-family: var(--sans);
+    font-size: 1.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #fff;
+    line-height: 1;
+  }
+  .header-text p {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-top: 0.3rem;
+    font-family: var(--mono);
+  }
+  .version-tag {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--amber-dim);
+    letter-spacing: 0.1em;
+    align-self: flex-end;
+  }
+
+  /* MAIN LAYOUT */
+  .main {
+    width: 100%;
+    max-width: 860px;
+    display: grid;
+    gap: 1.2rem;
+  }
+
+  /* DROP ZONE */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 2px;
+    padding: 3rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+    background: rgba(17,19,24,0.8);
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--amber);
+    background: rgba(232,160,48,0.04);
+  }
+  .drop-zone.has-file {
+    border-color: var(--green);
+    border-style: solid;
+    background: rgba(62,201,122,0.04);
+  }
+  .drop-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer;
+  }
+  .drop-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.8rem;
+    display: block;
+    opacity: 0.5;
+  }
+  .drop-label {
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }
+  .drop-label strong { color: var(--text); font-weight: 400; }
+  .file-status {
+    margin-top: 0.6rem;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--green);
+    display: none;
+  }
+  .has-file .file-status { display: block; }
+  .has-file .drop-icon { opacity: 1; }
+
+  /* PANEL */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .panel-header {
+    background: rgba(30,36,48,0.6);
+    padding: 0.6rem 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-header h2 {
+    font-size: 0.75rem;
+    font-family: var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--amber);
+    font-weight: 400;
+  }
+  .panel-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+    flex-shrink: 0;
+  }
+  .panel-body { padding: 1.4rem 1.4rem; }
+
+  /* SETTINGS GRID */
+  .settings-grid {
+    display: grid;
+    gap: 1.2rem;
+  }
+
+  .field-group {
+    display: grid;
+    gap: 0.4rem;
+  }
+  .field-label {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .field-label .tag {
+    color: var(--amber-dim);
+    font-size: 0.65rem;
+  }
+  .field-desc {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    font-family: var(--sans);
+    line-height: 1.5;
+    margin-bottom: 0.3rem;
+  }
+
+  /* SELECT */
+  select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    padding: 0.55rem 0.8rem;
+    border-radius: 2px;
+    outline: none;
+    appearance: none;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235a6475'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.8rem center;
+    padding-right: 2rem;
+    transition: border-color 0.15s;
+  }
+  select:focus { border-color: var(--amber); }
+  select option { background: #111318; }
+
+  /* RANGE + NUMBER */
+  .range-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.8rem;
+    align-items: center;
+  }
+  input[type=range] {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--amber);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 6px rgba(232,160,48,0.4);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--amber);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+  }
+  input[type=number] {
+    width: 72px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--amber);
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    padding: 0.45rem 0.5rem;
+    border-radius: 2px;
+    outline: none;
+    text-align: center;
+    transition: border-color 0.15s;
+  }
+  input[type=number]:focus { border-color: var(--amber); }
+
+  /* TOGGLE */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .toggle {
+    position: relative;
+    width: 42px; height: 22px;
+    flex-shrink: 0;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .toggle-track {
+    position: absolute; inset: 0;
+    background: var(--border);
+    border-radius: 11px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .toggle input:checked + .toggle-track { background: var(--green-dim); border: 1px solid var(--green); }
+  .toggle-track::after {
+    content: '';
+    position: absolute;
+    left: 3px; top: 3px;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: transform 0.2s, background 0.2s;
+  }
+  .toggle input:checked + .toggle-track::after {
+    transform: translateX(20px);
+    background: var(--green);
+  }
+  .toggle-label {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+  #straightLineToggle:checked ~ .toggle-label { color: var(--green); }
+
+  /* WAYPOINT COUNT INFO */
+  .info-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .info-chip {
+    background: rgba(30,36,48,0.8);
+    border: 1px solid var(--border);
+    padding: 0.35rem 0.8rem;
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .info-chip .val { color: var(--amber); }
+
+  /* CONVERT BUTTON */
+  .convert-btn {
+    width: 100%;
+    background: transparent;
+    border: 2px solid var(--amber);
+    color: var(--amber);
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 1rem;
+    cursor: pointer;
+    border-radius: 2px;
+    position: relative;
+    overflow: hidden;
+    transition: color 0.2s, background 0.2s;
+  }
+  .convert-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--amber);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.25s ease;
+    z-index: 0;
+  }
+  .convert-btn:hover::before { transform: scaleX(1); }
+  .convert-btn:hover { color: var(--bg); }
+  .convert-btn span { position: relative; z-index: 1; }
+  .convert-btn:disabled {
+    border-color: var(--border);
+    color: var(--text-dim);
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* LOG / OUTPUT */
+  .log-panel {
+    display: none;
+  }
+  .log-panel.visible { display: block; }
+  .log-body {
+    padding: 1rem 1.2rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    line-height: 1.8;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .log-line { color: var(--text-dim); }
+  .log-line.ok { color: var(--green); }
+  .log-line.warn { color: var(--amber); }
+  .log-line.err { color: var(--red); }
+  .log-line::before { content: '> '; opacity: 0.5; }
+
+  /* DOWNLOAD */
+  .download-section {
+    display: none;
+    animation: fadeUp 0.4s ease;
+  }
+  .download-section.visible { display: block; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .download-btn {
+    width: 100%;
+    background: var(--green-dim);
+    border: 2px solid var(--green);
+    color: var(--green);
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 1rem;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: background 0.2s;
+    text-decoration: none;
+    display: block;
+    text-align: center;
+  }
+  .download-btn:hover { background: rgba(62,201,122,0.15); }
+
+  /* DIVIDER */
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 0.2rem 0;
+  }
+
+  /* PRESETS */
+  .presets-row {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .preset-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    padding: 0.35rem 0.7rem;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+  .preset-btn:hover {
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+
+  /* scrollbar */
+  .log-body::-webkit-scrollbar { width: 4px; }
+  .log-body::-webkit-scrollbar-track { background: transparent; }
+  .log-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  footer {
+    margin-top: 3rem;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    opacity: 0.5;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+    </svg>
+  </div>
+  <div class="header-text">
+    <h1>KMZ Turn Converter</h1>
+    <p>DJI WPML · Waypoint Turn Mode Editor</p>
+  </div>
+  <span class="version-tag">v1.0 · 3DM</span>
+</header>
+
+<div class="main">
+
+  <!-- DROP ZONE -->
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept=".kmz">
+    <span class="drop-icon">📦</span>
+    <div class="drop-label"><strong>Drag & drop your KMZ file here</strong><br>or click to browse</div>
+    <div class="file-status" id="fileStatus">— no file —</div>
+  </div>
+
+  <!-- FILE INFO -->
+  <div class="panel" id="fileInfoPanel" style="display:none">
+    <div class="panel-header">
+      <div class="panel-dot"></div>
+      <h2>Mission Info</h2>
+    </div>
+    <div class="panel-body">
+      <div class="info-row" id="infoRow"></div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-dot"></div>
+      <h2>Turn Mode Settings</h2>
+    </div>
+    <div class="panel-body">
+      <div class="settings-grid">
+
+        <!-- TURN MODE -->
+        <div class="field-group">
+          <div class="field-label">
+            Turn Mode
+            <span class="tag">wpml:waypointTurnMode</span>
+          </div>
+          <div class="field-desc">
+            Controls how the aircraft handles each waypoint. For LiDAR survey lines, use <em>Fly-Through (Continuous)</em> to eliminate stops and maintain data quality.
+          </div>
+          <select id="turnMode">
+            <option value="toPointAndPassWithContinuityCurvature" selected>
+              Fly-Through (Continuous) — recommended for LiDAR
+            </option>
+            <option value="coordinateTurn">
+              Coordinated Turn — early arc, no stop
+            </option>
+            <option value="toPointAndStopWithContinuityCurvature">
+              Curved Approach, Stop at Point
+            </option>
+            <option value="toPointAndStopWithDiscontinuityCurvature">
+              Straight Line, Stop at Point — DJI default
+            </option>
+          </select>
+        </div>
+
+        <hr class="divider">
+
+        <!-- DAMPING DISTANCE -->
+        <div class="field-group">
+          <div class="field-label">
+            Turn Damping Distance
+            <span class="tag">wpml:waypointTurnDampingDist</span>
+          </div>
+          <div class="field-desc">
+            How far before the waypoint the aircraft begins its arc (metres). At 20 m/s survey speed, 20–30 m is a good starting point. Larger = wider, earlier arc. Must be less than half the distance between adjacent waypoints.
+          </div>
+          <div class="range-row">
+            <input type="range" id="dampingRange" min="1" max="100" value="25" step="1">
+            <input type="number" id="dampingNum" min="1" max="500" value="25">
+          </div>
+          <div class="presets-row" style="margin-top:0.5rem">
+            <span style="font-family:var(--mono);font-size:0.68rem;color:var(--text-dim);align-self:center;letter-spacing:0.05em">PRESETS:</span>
+            <button class="preset-btn" onclick="setDamping(10)">10 m · Slow</button>
+            <button class="preset-btn" onclick="setDamping(20)">20 m · 15 m/s</button>
+            <button class="preset-btn" onclick="setDamping(25)">25 m · 20 m/s</button>
+            <button class="preset-btn" onclick="setDamping(40)">40 m · Fast</button>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <!-- USE STRAIGHT LINE -->
+        <div class="field-group">
+          <div class="field-label">
+            Use Straight Line
+            <span class="tag">wpml:useStraightLine</span>
+          </div>
+          <div class="field-desc">
+            When enabled, the segment between waypoints is as straight as possible (the arc only applies near the waypoint). Disable for fully curved trajectories throughout the segment. Keep ON for survey lines.
+          </div>
+          <div class="toggle-row">
+            <label class="toggle">
+              <input type="checkbox" id="straightLine" checked>
+              <div class="toggle-track"></div>
+            </label>
+            <span class="toggle-label" id="straightLineLabel">Enabled — segments fly straight, arc at waypoints only</span>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <!-- OUTPUT FILENAME -->
+        <div class="field-group">
+          <div class="field-label">Output Filename</div>
+          <input type="text" id="outputName" placeholder="converted_mission.kmz"
+            style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:0.85rem;padding:0.55rem 0.8rem;border-radius:2px;outline:none;transition:border-color 0.15s"
+            onfocus="this.style.borderColor='var(--amber)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- CONVERT -->
+  <button class="convert-btn" id="convertBtn" disabled>
+    <span>⚡ Convert &amp; Apply Settings</span>
+  </button>
+
+  <!-- LOG -->
+  <div class="panel log-panel" id="logPanel">
+    <div class="panel-header">
+      <div class="panel-dot" style="background:var(--green)"></div>
+      <h2>Processing Log</h2>
+    </div>
+    <div class="log-body" id="logBody"></div>
+  </div>
+
+  <!-- DOWNLOAD -->
+  <div class="download-section" id="downloadSection">
+    <a class="download-btn" id="downloadBtn" href="#" download>
+      ⬇ Download Converted KMZ
+    </a>
+  </div>
+
+</div>
+
+<footer>3DroneMapping (Pty) Ltd · Prince Albert, Western Cape · DJI WPML v1.0.2</footer>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let loadedZip = null;
+let originalFileName = '';
+
+// ── Drop Zone ──────────────────────────────────────────────────────────────
+const dropZone  = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) handleFile(fileInput.files[0]);
+});
+
+// ── Sync range ↔ number ───────────────────────────────────────────────────
+const dampingRange = document.getElementById('dampingRange');
+const dampingNum   = document.getElementById('dampingNum');
+dampingRange.addEventListener('input', () => { dampingNum.value = dampingRange.value; });
+dampingNum.addEventListener('input', () => {
+  dampingRange.value = Math.min(100, Math.max(1, dampingNum.value));
+});
+
+function setDamping(v) {
+  dampingRange.value = Math.min(100, v);
+  dampingNum.value   = v;
+}
+
+// ── Straight line toggle label ─────────────────────────────────────────────
+const straightLine = document.getElementById('straightLine');
+const slLabel      = document.getElementById('straightLineLabel');
+straightLine.addEventListener('change', () => {
+  slLabel.textContent = straightLine.checked
+    ? 'Enabled — segments fly straight, arc at waypoints only'
+    : 'Disabled — fully curved trajectory throughout segment';
+});
+
+// ── Load file ──────────────────────────────────────────────────────────────
+async function handleFile(file) {
+  if (!file.name.toLowerCase().endsWith('.kmz')) {
+    alert('Please select a .kmz file.');
+    return;
+  }
+  originalFileName = file.name;
+
+  // Set output name
+  const base = file.name.replace(/\.kmz$/i, '');
+  document.getElementById('outputName').value = base + '_converted.kmz';
+
+  try {
+    loadedZip = await JSZip.loadAsync(file);
+  } catch(e) {
+    alert('Could not read KMZ file: ' + e.message);
+    return;
+  }
+
+  // Inspect WPML
+  const wpmlFile = loadedZip.file('wpmz/waylines.wpml');
+  if (!wpmlFile) {
+    alert('No wpmz/waylines.wpml found in this KMZ — is it a Pilot 2 waypoint mission?');
+    return;
+  }
+
+  const xml = await wpmlFile.async('string');
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'application/xml');
+
+  // Count waypoints
+  const placemarks = doc.querySelectorAll('Placemark');
+  const waylineCount = doc.querySelectorAll('Folder').length;
+  const speed = doc.querySelector('wpml\\:autoFlightSpeed, autoFlightSpeed');
+  const speedVal = speed ? parseFloat(speed.textContent).toFixed(1) + ' m/s' : 'N/A';
+
+  // Current turn modes
+  const turnNodes = doc.querySelectorAll('wpml\\:waypointTurnMode, waypointTurnMode');
+  const currentModes = [...new Set([...turnNodes].map(n => n.textContent.trim()))];
+
+  // Show info
+  document.getElementById('fileInfoPanel').style.display = 'block';
+  document.getElementById('infoRow').innerHTML = `
+    <div class="info-chip">File <span class="val">${file.name}</span></div>
+    <div class="info-chip">Waypoints <span class="val">${placemarks.length}</span></div>
+    <div class="info-chip">Waylines <span class="val">${waylineCount}</span></div>
+    <div class="info-chip">Global Speed <span class="val">${speedVal}</span></div>
+    <div class="info-chip">Current Turn Mode <span class="val" style="color:var(--amber-dim);max-width:220px;overflow:hidden;text-overflow:ellipsis">${currentModes.join(', ') || 'unknown'}</span></div>
+  `;
+
+  dropZone.classList.add('has-file');
+  dropZone.querySelector('.drop-icon').textContent = '✅';
+  document.getElementById('fileStatus').textContent = `Loaded: ${file.name}`;
+
+  document.getElementById('convertBtn').disabled = false;
+  document.getElementById('downloadSection').classList.remove('visible');
+  document.getElementById('logPanel').classList.remove('visible');
+  clearLog();
+}
+
+// ── Logging ────────────────────────────────────────────────────────────────
+function clearLog() { document.getElementById('logBody').innerHTML = ''; }
+function log(msg, type='') {
+  const div = document.createElement('div');
+  div.className = 'log-line ' + type;
+  div.textContent = msg;
+  document.getElementById('logBody').appendChild(div);
+  document.getElementById('logBody').scrollTop = 9999;
+}
+
+// ── Convert ────────────────────────────────────────────────────────────────
+document.getElementById('convertBtn').addEventListener('click', async () => {
+  if (!loadedZip) return;
+
+  clearLog();
+  document.getElementById('logPanel').classList.add('visible');
+  document.getElementById('downloadSection').classList.remove('visible');
+
+  const turnMode    = document.getElementById('turnMode').value;
+  const damping     = parseFloat(document.getElementById('dampingNum').value);
+  const useStraight = document.getElementById('straightLine').checked ? 1 : 0;
+  const outName     = document.getElementById('outputName').value || 'converted.kmz';
+
+  log('Reading waylines.wpml …');
+
+  const wpmlFile = loadedZip.file('wpmz/waylines.wpml');
+  if (!wpmlFile) { log('ERROR: waylines.wpml not found', 'err'); return; }
+
+  let xml = await wpmlFile.async('string');
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'application/xml');
+
+  // Find all waypointTurnParam blocks
+  // We need to use namespace-aware selectors
+  const ns = 'http://www.dji.com/wpmz/1.0.2';
+  let allTurnParams = doc.getElementsByTagNameNS(ns, 'waypointTurnParam');
+  // Fallback: no namespace
+  if (allTurnParams.length === 0) {
+    allTurnParams = doc.getElementsByTagName('waypointTurnParam');
+  }
+  if (allTurnParams.length === 0) {
+    // Try to work on raw XML string
+    log('No waypointTurnParam blocks found via DOM — using string replacement fallback', 'warn');
+  }
+
+  const count = allTurnParams.length;
+  log(`Found ${count} waypointTurnParam block(s)`);
+
+  let modified = 0;
+
+  // Process each waypointTurnParam
+  for (let i = 0; i < allTurnParams.length; i++) {
+    const block = allTurnParams[i];
+
+    // Set waypointTurnMode
+    let modeEl = block.getElementsByTagNameNS(ns, 'waypointTurnMode')[0]
+                 || block.getElementsByTagName('waypointTurnMode')[0];
+    if (modeEl) {
+      modeEl.textContent = turnMode;
+    } else {
+      // Create it
+      const el = doc.createElementNS(ns, 'wpml:waypointTurnMode');
+      el.textContent = turnMode;
+      block.appendChild(el);
+    }
+
+    // Set dampingDist (only relevant for coordinated / fly-through modes)
+    let dampEl = block.getElementsByTagNameNS(ns, 'waypointTurnDampingDist')[0]
+                 || block.getElementsByTagName('waypointTurnDampingDist')[0];
+    if (dampEl) {
+      dampEl.textContent = damping;
+    } else {
+      const el = doc.createElementNS(ns, 'wpml:waypointTurnDampingDist');
+      el.textContent = damping;
+      block.appendChild(el);
+    }
+
+    modified++;
+  }
+
+  log(`Updated turn mode → ${turnMode}`, 'ok');
+  log(`Turn damping distance → ${damping} m`, 'ok');
+
+  // Handle useStraightLine — it's a sibling of waypointTurnParam on each Placemark
+  const placemarks = doc.querySelectorAll('Placemark');
+  let slCount = 0;
+  placemarks.forEach(pm => {
+    let slEl = pm.getElementsByTagNameNS(ns, 'useStraightLine')[0]
+               || pm.getElementsByTagName('useStraightLine')[0];
+    if (slEl) {
+      slEl.textContent = useStraight;
+      slCount++;
+    } else {
+      // Only needed for curve modes
+      if (turnMode === 'toPointAndPassWithContinuityCurvature' ||
+          turnMode === 'toPointAndStopWithContinuityCurvature') {
+        const el = doc.createElementNS(ns, 'wpml:useStraightLine');
+        el.textContent = useStraight;
+        // Insert after waypointTurnParam if possible
+        const tp = pm.getElementsByTagNameNS(ns, 'waypointTurnParam')[0]
+                   || pm.getElementsByTagName('waypointTurnParam')[0];
+        if (tp && tp.nextSibling) {
+          pm.insertBefore(el, tp.nextSibling);
+        } else if (tp) {
+          pm.appendChild(el);
+        }
+        slCount++;
+      }
+    }
+  });
+
+  log(`useStraightLine → ${useStraight} (applied to ${slCount} placemarks)`, 'ok');
+
+  // Serialise back
+  const serializer = new XMLSerializer();
+  const newXml = serializer.serializeToString(doc);
+
+  // Build new ZIP
+  log('Rebuilding KMZ …');
+  const newZip = new JSZip();
+
+  // Copy all files from original, replacing waylines.wpml
+  const fileList = Object.keys(loadedZip.files);
+  for (const fname of fileList) {
+    const entry = loadedZip.files[fname];
+    if (entry.dir) {
+      newZip.folder(fname);
+      continue;
+    }
+    if (fname === 'wpmz/waylines.wpml') {
+      newZip.file(fname, newXml);
+    } else {
+      const blob = await entry.async('arraybuffer');
+      newZip.file(fname, blob);
+    }
+  }
+
+  log('Compressing …');
+  const outBlob = await newZip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+
+  const url = URL.createObjectURL(outBlob);
+  const dlBtn = document.getElementById('downloadBtn');
+  dlBtn.href = url;
+  dlBtn.download = outName;
+  dlBtn.textContent = `⬇  Download  ${outName}`;
+
+  log(`Done — ${modified} waypoint turn blocks modified`, 'ok');
+  log(`Output: ${outName} (${(outBlob.size / 1024).toFixed(1)} KB)`, 'ok');
+
+  document.getElementById('downloadSection').classList.add('visible');
+});
+</script>
+</body>
+</html>
