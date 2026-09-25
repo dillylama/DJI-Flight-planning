@@ -1,0 +1,38 @@
+// Cloudflare Worker config for the M400/L3 sync backend.
+// Local dev only so far: `npm run dev -w @3dm/api` (wrangler dev --local, Miniflare).
+// Nothing in here has been created on Cloudflare yet; see README "Deploy (NOT done yet)".
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "m400-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "send_metrics": false,
+  "observability": { "enabled": true },
+
+  // Non-secret config. ADMIN_TOKEN is a secret: `.dev.vars` locally, `wrangler secret put ADMIN_TOKEN` in production.
+  "vars": {
+    // Comma-separated origins of the office planner. TODO(deploy): add the production planner origin.
+    "ALLOWED_ORIGINS": "http://localhost:5178"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "m400-api",
+      // TODO(deploy): placeholder. Replace with the id printed by `wrangler d1 create m400-api`.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      // TODO(deploy): create with `wrangler r2 bucket create m400-packages` (or change the name here).
+      "bucket_name": "m400-packages"
+    }
+  ]
+
+  // TODO(deploy): custom domain, e.g.
+  // "routes": [{ "pattern": "api.example.com", "custom_domain": true }]
+}

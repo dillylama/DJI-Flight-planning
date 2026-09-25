@@ -66,6 +66,15 @@ Luke will supply later; scaffold the WPML writer around it, don't invent values.
 3. RC app: sync/offline, pre-flight checklist, fly/monitor, auto-resume, sorties, as-flown logs.
 4. Pilot 2 injection path. 5. Field validation (WP cap, simulator, short live block).
 
+## Sync backend (apps/api)
+- Worker + D1 + R2, local only so far (dev on port 8788; 8787 is SurveyDeliver). Admin token in apps/api/.dev.vars.
+- Deploy needs Luke: Cloudflare account, D1/R2 create, ADMIN_TOKEN secret, domain, ALLOWED_ORIGINS, Access.
+- Planner dev prefill: apps/web/.env.development.local (VITE_OPENTOPO_KEY, VITE_API_URL, VITE_API_ADMIN_TOKEN).
+
+## Sorties (packages/core/src/sorties.ts)
+- Split at whole lines by usable minutes/battery set; each sortie = transit + climb + fig-8 + lines + RTH + descent,
+  timed with conservative vertical rates (4 up / 3 down m/s). Home placement dominates sortie count on high blocks.
+
 ## Conventions / constraints
 - RC Plus 2 browser file picker is broken — anything on the RC loads via our app, not the browser.
 - FlightHub 2 is not part of this workflow.

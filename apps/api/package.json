@@ -1,0 +1,21 @@
+{
+  "name": "@3dm/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --port 8788",
+    "build": "node scripts/build.mjs",
+    "test": "npm run build && node --test \"test/**/*.test.mjs\"",
+    "typecheck": "tsc -p .",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260925.1",
+    "esbuild": "^0.28.1",
+    "miniflare": "5.20260923.0-alpha",
+    "typescript": "^5.9.0",
+    "wrangler": "^4.140.0"
+  }
+}

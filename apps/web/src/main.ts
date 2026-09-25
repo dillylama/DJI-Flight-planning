@@ -6,26 +6,30 @@ import { PathLayer, LineLayer } from '@deck.gl/layers';
 import {
   DEFAULTS, TAKEOFF_DEFAULTS, M400_LIMITS, M400_SPEC, L3_PULSE, L3_SCAN, CAMERAS,
   planLines, buildRoute, applyHeights, stats, validate, readGeoTiff, rasterElev, rasterBbox,
-  bufferedBbox, openTopoUrl, planTransit, coverage, checkLimits,
+  bufferedBbox, openTopoUrl, planTransit, coverage, checkLimits, planSorties,
   cameraFovDeg, gsdCm, aglForGsd, photoPlan, frontlapAtInterval, lidarDensity,
   type PlanOptions, type Plan, type Route, type FlightWp, type RouteStats, type Issue, type ElevFn, type Bbox,
-  type LonLat, type TakeoffOptions, type Transit, type Coverage, type Pt3, type Camera, type PhotoPlan,
+  type LonLat, type TakeoffOptions, type Transit, type Coverage, type Pt3, type Camera, type PhotoPlan, type SortiePlan,
 } from '@3dm/core';
 import { aoiFromFile, type Aoi } from './aoi.ts';
 import { demoPoly, demoElev } from './demo.ts';
 import { renderProfile, type ProfilePt } from './profile.ts';
 import { TIPS } from './tips.ts';
 import { getBlob, putBlob } from './store.ts';
+import { publish, newPairingCode, listDevices, type ApiCfg } from './sync.ts';
 
 // ── State ─────────────────────────────────────────────────────────
 interface Dem { name: string; elev: ElevFn; bbox?: Bbox }
 interface Result {
   plan: Plan; route: Route; flight: Route<FlightWp> | null; st: RouteStats | null; issues: Issue[];
   demError: string | null; transit: Transit | null; cov: Coverage | null; photo: PhotoPlan | null; totalMin: number | null;
+  sp: SortiePlan | null;
 }
+// What the map/profile show: the whole job, or one sortie.
+interface View { plan: Plan; route: Route; flight: Route<FlightWp> | null; transit: Transit | null; cov: Coverage | null; issues: Issue[]; lastLine: number }
 type SensorKind = 'lidar' | 'photo';
-interface SurveyCfg { sensor: SensorKind; pulse: string; scan: string; fig8: boolean; camera: string; frontlap: number; shutterInv: number; sortieMin: number }
-const SURVEY_DEFAULTS: SurveyCfg = { sensor: 'lidar', pulse: '100', scan: 'linear', fig8: true, camera: 'p1-35', frontlap: 80, shutterInv: 1000, sortieMin: M400_LIMITS.sortieMinDefault };
+interface SurveyCfg { sensor: SensorKind; pulse: string; scan: string; fig8: boolean; camera: string; frontlap: number; shutterInv: number; sortieMin: number; sortieOverlap: number; maxWp: number | null }
+const SURVEY_DEFAULTS: SurveyCfg = { sensor: 'lidar', pulse: '100', scan: 'linear', fig8: true, camera: 'p1-35', frontlap: 80, shutterInv: 1000, sortieMin: M400_LIMITS.sortieMinDefault, sortieOverlap: 0, maxWp: null };
 const LAYERS = [
   ['aoi', 'Block outline'], ['lines', 'Data lines'], ['turns', 'Run-in/out & turns'], ['fig8', 'Figure-8 & approach'],
   ['wps', 'Waypoints'], ['rec', 'Record start/stop'], ['swath', 'Swath / photo footprint'], ['drops', 'Drop lines to terrain (3D)'],
@@ -52,6 +56,9 @@ const state = {
   dem: (saved.demo ? { name: 'Synthetic ridge (demo)', elev: demoElev } : null) as Dem | null,
   resume: { on: false, fromLine: 1, speed: 14 },
   selLine: 0 as number | 'transit',
+  selSortie: 'all' as 'all' | number,
+  demBuf: null as ArrayBuffer | null,
+  view: null as View | null,
   pickingHome: false,
   result: null as Result | null,
 };
@@ -151,6 +158,8 @@ app.innerHTML = `
       <label class="span2"><span class="lt">Fly to route ${ti('flyToMode')}</span>
         <select id="flyToMode"><option value="safely">Safely: climb, then fly level</option><option value="pointToPoint">Point to point: climb, then slope</option></select></label>
       <label class="span2"><span class="lt">Usable time per battery set <em>min</em><i class="ti" tabindex="0" data-tip="Planning endurance per sortie, landing reserve already removed. DJI quotes 59 min flight / 53 min hover for the M400 with the light H30T only; there is no official figure with the 1.75 kg L3." data-rec="${M400_LIMITS.sortieMinDefault} min with L3 until you have your own logs.">i</i></span><input type="number" id="sortieIn" step="1" min="5" max="50" /></label>
+      <label><span class="lt">Lines re-flown <em>per split</em>${ti('sortieOverlap')}</span><input type="number" id="overlapIn" step="1" min="0" max="2" /></label>
+      <label><span class="lt">Max WPs per route${ti('maxWp')}</span><input type="number" id="maxWpIn" step="50" min="50" placeholder="unknown" /></label>
     </div>
     <div class="sensor-note">M400 limits used (conservative): line speed ≤ ${M400_LIMITS.lineSpeedWarnMs} m/s (max ${M400_SPEC.maxHorizontalMs}), climb ≤ ${M400_LIMITS.climbWarnMs} m/s (max ${M400_SPEC.maxAscentMs}), descent ≤ ${M400_LIMITS.descentWarnMs} m/s (max ${M400_SPEC.maxDescentMs}), wind limit ${M400_SPEC.maxWindMs} m/s.</div>
   </section>
@@ -161,6 +170,16 @@ app.innerHTML = `
       <label><span class="lt">Data stopped on line ${ti('resLine')}</span><input type="number" id="resLine" min="1" value="1" /></label>
       <label><span class="lt">New speed <em>m/s</em>${ti('resSpeed')}</span><input type="number" id="resSpeed" step="0.5" min="1" max="20" value="14" /></label>
     </div>
+  </section>
+  <section>
+    <h2>Sync to RC ${ti('sync')}</h2>
+    <label class="lbl" for="apiUrl">Sync server URL</label>
+    <input id="apiUrl" type="url" placeholder="https://…" autocomplete="off" />
+    <label class="lbl" for="apiToken" style="margin-top:8px">Office token ${ti('apiToken')}</label>
+    <input id="apiToken" type="password" placeholder="Admin token" autocomplete="off" />
+    <div class="row"><button id="publishBtn" disabled>Publish to RC</button><button id="pairBtn" class="ghost">Pair an RC</button></div>
+    <div class="note" id="syncInfo"></div>
+    <div class="pair-code" id="pairCode" hidden></div>
   </section>
 </aside>
 <main>
@@ -173,6 +192,7 @@ app.innerHTML = `
   </div>
   <div class="map-toggles">
     <button id="view3d" class="ghost"${btnTip('view3d')}>3D</button>
+    <select id="sortieSel" title="Show the whole job or one sortie"></select>
     <button id="layersBtn" class="ghost"${btnTip('layers')}>Layers ▾</button>
     <div class="layers-panel" id="layersPanel" hidden>${LAYERS.map(([id, label]) => `<label class="check"><input type="checkbox" data-layer="${id}" /> ${label}</label>`).join('')}</div>
   </div>
@@ -229,6 +249,8 @@ function syncFields() {
   $<HTMLInputElement>('frontlapIn').value = String(s.frontlap);
   $<HTMLInputElement>('shutterIn').value = String(s.shutterInv);
   $<HTMLInputElement>('sortieIn').value = String(s.sortieMin);
+  $<HTMLInputElement>('overlapIn').value = String(s.sortieOverlap);
+  $<HTMLInputElement>('maxWpIn').value = s.maxWp != null ? String(s.maxWp) : '';
   $<HTMLInputElement>('gsdIn').value = gsdCm(camera(), P('aglM')).toFixed(2);
   document.querySelectorAll<HTMLButtonElement>('#sensorSeg button').forEach(b => b.classList.toggle('active', b.dataset.sensor === s.sensor));
   document.querySelectorAll<HTMLElement>('aside [data-only]').forEach(el => { el.hidden = el.dataset.only !== s.sensor; });
@@ -281,6 +303,9 @@ $('gsdIn').addEventListener('input', e => {
 $('frontlapIn').addEventListener('input', e => { const v = Number((e.target as HTMLInputElement).value); if (v > 0) { state.survey.frontlap = v; persist(); schedule(); } });
 $('shutterIn').addEventListener('input', e => { const v = Number((e.target as HTMLInputElement).value); if (v > 0) { state.survey.shutterInv = v; persist(); schedule(); } });
 $('sortieIn').addEventListener('input', e => { const v = Number((e.target as HTMLInputElement).value); if (v > 0) { state.survey.sortieMin = v; persist(); schedule(); } });
+$('overlapIn').addEventListener('input', e => { const v = Number((e.target as HTMLInputElement).value); if (v >= 0) { state.survey.sortieOverlap = v; persist(); schedule(); } });
+$('maxWpIn').addEventListener('input', e => { const t = (e.target as HTMLInputElement).value; state.survey.maxWp = t === '' ? null : Number(t); persist(); schedule(); });
+$('sortieSel').addEventListener('change', e => { const v = (e.target as HTMLSelectElement).value; selectSortie(v === 'all' ? 'all' : Number(v)); });
 
 // ── Map ───────────────────────────────────────────────────────────
 const css = (v: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -306,10 +331,19 @@ const map = new maplibregl.Map({
     },
     layers: [{ id: 'sat', type: 'raster', source: 'sat', paint: { 'raster-saturation': -0.4, 'raster-brightness-max': 0.78 } }],
   },
-  center: [22.03, -33.21], zoom: 5, maxPitch: 80, attributionControl: { compact: true },
+  // Open framed on the saved block (no waiting for tiles), else the Western Cape.
+  ...(state.aoi ? {
+    bounds: [
+      [Math.min(...state.aoi.poly.map(p => p[0])), Math.min(...state.aoi.poly.map(p => p[1]))],
+      [Math.max(...state.aoi.poly.map(p => p[0])), Math.max(...state.aoi.poly.map(p => p[1]))],
+    ] as LngLatBoundsLike,
+    fitBoundsOptions: { padding: 60 },
+  } : { center: [22.03, -33.21] as [number, number], zoom: 5 }),
+  maxPitch: 80, attributionControl: { compact: true },
 });
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
 map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+if (import.meta.env.DEV) (window as unknown as { __map: maplibregl.Map }).__map = map;   // dev-only debugging handle
 const deck = new MapboxOverlay({ interleaved: true, layers: [] });
 map.addControl(deck);
 
@@ -321,7 +355,7 @@ const visibleRoles = () => [
 ];
 
 let mapReady = false;
-map.on('load', () => {
+function onStyleReady() {   // style ready: add our layers without waiting for every tile
   for (const id of ['aoi', 'route', 'wps', 'rec', 'swath', 'transit', 'rth']) map.addSource(id, { type: 'geojson', data: empty });
   map.addLayer({ id: 'swath-fill', type: 'fill', source: 'swath', paint: { 'fill-color': css('--c-swath'), 'fill-opacity': 0.14 } });
   map.addLayer({ id: 'aoi-fill', type: 'fill', source: 'aoi', paint: { 'fill-color': css('--c-aoi'), 'fill-opacity': 0.06 } });
@@ -350,7 +384,9 @@ map.on('load', () => {
   applyView(false);
   if (state.aoi) fitAoi();
   schedule();
-});
+}
+// An inline style can finish loading before this line runs, so check first, then fall back to the event.
+if (map.isStyleLoaded()) onStyleReady(); else map.once('style.load', onStyleReady);
 const src = (id: string) => map.getSource(id) as GeoJSONSource | undefined;
 
 function fitAoi() {
@@ -400,7 +436,7 @@ function applyView(animate = true) {
   map.setLayoutProperty('transit-line', 'visibility', vis(flat && L.transit));
   map.setLayoutProperty('rth-line', 'visibility', vis(flat && L.rth));
   if (animate) map.easeTo({ pitch: state.view3d ? 60 : 0, bearing: state.view3d ? map.getBearing() || -20 : 0, duration: 800 });
-  renderDeck(state.result);
+  renderDeck(state.view);
 }
 $('view3d').onclick = () => { state.view3d = !state.view3d; persist(); applyView(); };
 $('layersBtn').onclick = () => { $('layersPanel').hidden = !$('layersPanel').hidden; };
@@ -427,7 +463,7 @@ function compute(): Result | null {
   if (!plan.lines.length) return null;
   const fromLine = state.resume.on ? Math.min(plan.lines.length, Math.max(1, state.resume.fromLine)) - 1 : undefined;
   const route = buildRoute(plan, routeOpts(fromLine));
-  const r: Result = { plan, route, flight: null, st: null, issues: [], demError: null, transit: null, cov: null, photo: null, totalMin: null };
+  const r: Result = { plan, route, flight: null, st: null, issues: [], demError: null, transit: null, cov: null, photo: null, totalMin: null, sp: null };
   if (isPhoto()) r.photo = photoPlan(camera(), plan.o.aglM, route.speedMs, state.survey.frontlap, 1 / state.survey.shutterInv);
   if (!state.dem) return r;
   try {
@@ -464,7 +500,21 @@ function compute(): Result | null {
   r.issues.push(...checkLimits(plan, r.flight, {
     sensor: state.survey.sensor, pulse: isPhoto() ? undefined : pulse(), scanFovH: isPhoto() ? undefined : plan.o.fovDeg,
     sortieMin: state.survey.sortieMin, totalMin: r.totalMin,
-  }));
+  }).filter(i => i.code !== 'SORTIES'));
+  try {
+    r.sp = planSorties(plan, state.dem.elev, state.home, state.takeoff, {
+      usableMin: state.survey.sortieMin, firstLine: route.startIdx, speedMs: route.speedMs, fig8: !isPhoto() && state.survey.fig8,
+      overlapLines: state.survey.sortieOverlap, maxWaypoints: state.survey.maxWp,
+      climbMs: M400_LIMITS.climbWarnMs, descentMs: M400_LIMITS.descentWarnMs, full: r.flight,
+    });
+    r.issues.push(...r.sp.issues);
+    for (const so of r.sp.sorties) if (so.transit) {
+      if (so.transit.minClearanceM < clr) r.issues.push({ severity: 'error', code: 'SORTIE_TRANSIT', message: `Sortie ${so.index + 1}: take-off transit clears terrain by only ${so.transit.minClearanceM.toFixed(0)} m (need ${clr} m).` });
+      if (so.transit.rthWorstClearanceM < clr) r.issues.push({ severity: 'error', code: 'SORTIE_RTH', message: `Sortie ${so.index + 1}: RTH at ${so.transit.rthHeightM} m clears terrain by only ${so.transit.rthWorstClearanceM.toFixed(0)} m. Recommended ≥ ${so.transit.rthRecommendedM} m.` });
+    }
+  } catch (e) {
+    r.issues.push({ severity: 'error', code: 'SORTIES', message: 'Sortie split failed: ' + (e as Error).message });
+  }
   if (r.photo) {
     const p = r.photo, c = camera();
     if (p.intervalS < c.minIntervalS) r.issues.push({ severity: 'error', code: 'PHOTO_INTERVAL', message: `Photos needed every ${p.intervalS.toFixed(2)} s, faster than the ${c.name} minimum ${c.minIntervalS} s. Fly ≤ ${p.maxSpeedMs.toFixed(1)} m/s, lower the frontlap, or fly higher.` });
@@ -476,26 +526,56 @@ function compute(): Result | null {
   return r;
 }
 
+function viewOf(r: Result | null): View | null {
+  if (!r) return null;
+  const so = state.selSortie !== 'all' ? r.sp?.sorties[state.selSortie] : undefined;
+  if (!so) return { plan: r.plan, route: r.route, flight: r.flight, transit: r.transit, cov: r.cov, issues: r.issues, lastLine: r.plan.lines.length - 1 };
+  const cov = r.cov && { ...r.cov, swaths: r.cov.swaths.filter(s => s.line >= so.fromLine && s.line <= so.toLine) };
+  return { plan: r.plan, route: so.route, flight: so.route, transit: so.transit, cov, issues: r.issues, lastLine: so.toLine };
+}
+function renderSortieSel(r: Result | null) {
+  const sel = $<HTMLSelectElement>('sortieSel');
+  const n = r?.sp?.sorties.length ?? 0;
+  if (state.selSortie !== 'all' && state.selSortie >= n) state.selSortie = 'all';
+  sel.hidden = n < 2;
+  sel.innerHTML = '<option value="all">Whole job</option>' + (r?.sp?.sorties ?? []).map(so =>
+    `<option value="${so.index}">Sortie ${so.index + 1} · L${so.fromLine + 1}–${so.toLine + 1}</option>`).join('');
+  sel.value = String(state.selSortie);
+}
+function selectSortie(i: 'all' | number) {
+  state.selSortie = i;
+  const so = i !== 'all' ? state.result?.sp?.sorties[i] : undefined;
+  if (so) state.selLine = so.fromLine;
+  renderView();
+  renderStats(state.result);
+}
+function renderView() {
+  const v = (state.view = viewOf(state.result));
+  renderSortieSel(state.result);
+  renderMap(v);
+  renderDeck(v);
+  renderLineSel(v);
+  renderProf();
+}
+
 function run() {
   const r = (state.result = compute());
   $<HTMLButtonElement>('exportJson').disabled = !r?.flight || r.issues.some(i => i.severity === 'error');
+  $<HTMLButtonElement>('publishBtn').disabled = $<HTMLButtonElement>('exportJson').disabled;
   $<HTMLButtonElement>('optCourse').disabled = !state.aoi;
   $<HTMLButtonElement>('fetchDem').disabled = !state.aoi;
   $('blockName').textContent = state.aoi ? state.aoi.name : 'No block loaded';
   $('homeInfo').textContent = !state.home ? 'Not set'
     : `${state.home[1].toFixed(5)}, ${state.home[0].toFixed(5)}${r?.transit ? ` · ground ${r.transit.homeElev.toFixed(0)} m` : ''}`;
-  renderMap(r);
-  renderDeck(r);
+  renderView();
   renderStats(r);
   renderIssues(r);
-  renderLineSel(r);
-  renderProf();
 }
 
 // ── Render: 2D map ───────────────────────────────────────────────
 const lonlat = (plan: Plan, w: { xy: [number, number] }) => plan.proj.inv(w.xy[0], w.xy[1]);
 interface Seg { role: string; line: number | null; coords: number[][] }
-function segments(r: Result, withZ: boolean): Seg[] {
+function segments(r: View, withZ: boolean): Seg[] {
   const src3 = r.flight?.wps ?? r.route.wps;
   const pos = (i: number) => {
     const w = src3[i]; const [lon, lat] = lonlat(r.plan, w);
@@ -517,7 +597,7 @@ function segments(r: Result, withZ: boolean): Seg[] {
 const lineFc = (pts: Pt3[] | undefined): GeoJSON.FeatureCollection | GeoJSON.Feature =>
   pts ? { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: pts.map(p => [p.lon, p.lat]) } } : empty;
 
-function renderMap(r: Result | null) {
+function renderMap(r: View | null) {
   if (!mapReady) return;
   const aoi = state.aoi;
   src('aoi')!.setData(aoi ? { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[...aoi.poly, aoi.poly[0]]] } } : empty);
@@ -539,7 +619,7 @@ function renderMap(r: Result | null) {
 }
 
 // ── Render: 3D (deck.gl, true heights) ───────────────────────────
-function renderDeck(r: Result | null) {
+function renderDeck(r: View | null) {
   if (!state.view3d || !r?.flight) { deck.setProps({ layers: [] }); return; }
   const col: Record<string, [number, number, number, number]> = {
     line: rgba('--c-line'), fig8: rgba('--c-fig8'), approach: rgba('--c-appr'), runin: rgba('--c-run'), runout: rgba('--c-run'),
@@ -610,8 +690,11 @@ function renderStats(r: Result | null) {
     ['Transit clearance', `${fmt(t.minClearanceM)} m min`],
     ['RTH height', `${fmt(t.rthHeightM)} m${state.takeoff.rthHeightM == null ? ' auto' : ''} (rec. ≥ ${fmt(t.rthRecommendedM)})`],
   );
-  if (r.totalMin != null) rows.push(['Flight time*', `${fmt(r.totalMin)} min · ${Math.ceil(r.totalMin / state.survey.sortieMin)} sortie(s)`, `Sorties at ${state.survey.sortieMin} min usable per battery set.`]);
-  el.innerHTML = rows.map(row => typeof row === 'string' ? `<h3>${row}</h3>`
+  if (r.totalMin != null) rows.push(['Flight time*', `${fmt(r.sp ? r.sp.totalMin : r.totalMin)} min`, 'Sum over all sorties: each has its own transit, climb, figure-8, lines, RTH and descent.']);
+  const sp = r.sp;
+  const sortieHtml = sp ? `<h3>Sorties · ${sp.sorties.length} × ≤ ${state.survey.sortieMin} min</h3>` + sp.sorties.map(so =>
+    `<div class="sortie${state.selSortie === so.index ? ' sel' : ''}${so.overBudget ? ' over' : ''}" data-sortie="${so.index}" data-tip="Transit ${fmt(so.time.transit, 1)} + climb/descent ${fmt(so.time.vertical, 1)} + route ${fmt(so.time.route, 1)} + RTH ${fmt(so.time.rth, 1)} min. Click to show it on the map."><span>S${so.index + 1} · L${so.fromLine + 1}–${so.toLine + 1}</span><b>${so.route.wps.length} WP · ${fmt(so.time.total, 1)} min</b></div>`).join('') : '';
+  el.innerHTML = sortieHtml + rows.map(row => typeof row === 'string' ? `<h3>${row}</h3>`
     : `<div${row[2] ? ` data-tip="${esc(row[2])}"` : ''}><span>${row[0]}</span><b>${row[1]}</b></div>`).join('') +
     (st ? `<p class="foot">*route ÷ speed${t ? ' + transit + RTH from last WP' : ''}; excludes acceleration and figure-8 slow-down.</p>` : '');
 }
@@ -628,9 +711,9 @@ function renderIssues(r: Result | null) {
     : '<div class="issue ok"><b>ok</b><span>No problems found.</span></div>');
 }
 
-function renderLineSel(r: Result | null) {
+function renderLineSel(r: View | null) {
   const sel = $<HTMLSelectElement>('lineSel');
-  const n = r?.plan.lines.length ?? 0;
+  const n = r ? r.lastLine + 1 : 0;
   const start = r?.route.startIdx ?? 0;
   if (state.selLine === 'transit' && !r?.transit) state.selLine = start;
   if (typeof state.selLine === 'number' && (state.selLine >= n || state.selLine < start)) state.selLine = start;
@@ -642,12 +725,12 @@ $<HTMLSelectElement>('lineSel').onchange = e => {
   const v = (e.target as HTMLSelectElement).value;
   selectLine(v === 'transit' ? 'transit' : Number(v));
 };
-function selectLine(i: number | 'transit') { state.selLine = i; renderMap(state.result); renderDeck(state.result); renderLineSel(state.result); renderProf(); }
+function selectLine(i: number | 'transit') { state.selLine = i; renderMap(state.view); renderDeck(state.view); renderLineSel(state.view); renderProf(); }
 
 function renderProf() {
   const svg = $('profile') as unknown as SVGSVGElement;
   const info = $('profInfo');
-  const r = state.result;
+  const r = state.view;
   if (!r?.flight || !state.dem) {
     svg.replaceChildren();
     info.textContent = !state.dem ? 'Load terrain (Fetch GLO-30 or drop a GeoTIFF) to see the profile.' : '';
@@ -671,11 +754,17 @@ function renderProf() {
   renderProfile(svg, r.plan, pts, state.dem.elev, floor);
 }
 new ResizeObserver(() => renderProf()).observe($('profile'));
+$('stats').addEventListener('click', e => {
+  const row = (e.target as HTMLElement).closest<HTMLElement>('[data-sortie]');
+  if (!row) return;
+  const i = Number(row.dataset.sortie);
+  selectSortie(state.selSortie === i ? 'all' : i);
+});
 
 // ── Block input ──────────────────────────────────────────────────
 function setAoi(aoi: Aoi, demo = false) {
   state.aoi = aoi; state.demo = demo; state.selLine = 0;
-  if (demo) { state.dem = { name: 'Synthetic ridge (demo)', elev: demoElev }; state.params = { ...state.params, courseDeg: 20 }; }
+  if (demo) { state.dem = { name: 'Synthetic ridge (demo)', elev: demoElev }; state.demBuf = null; state.params = { ...state.params, courseDeg: 20 }; }
   persist(); syncFields(); fitAoi(); updateDemInfo(); schedule();
   $('blockInfo').textContent = `${aoi.poly.length} vertices${aoi.polygonsFound > 1 ? `, largest of ${aoi.polygonsFound} polygons` : ''}.`;
 }
@@ -699,6 +788,7 @@ function updateDemInfo(msg?: string) {
 async function useDemBuffer(buf: ArrayBuffer, name: string, save = true) {
   const raster = await readGeoTiff(buf);
   state.dem = { name: `${name} (${raster.width}×${raster.height})`, elev: rasterElev(raster), bbox: rasterBbox(raster) };
+  state.demBuf = buf;
   state.demo = false; persist(); updateDemInfo(); schedule();
   if (save) await putBlob('dem', { name, buf });
 }
@@ -767,10 +857,10 @@ $('optCourse').onclick = async () => {
 };
 
 // ── Export ───────────────────────────────────────────────────────
-$('exportJson').onclick = () => {
+function buildMission() {
   const r = state.result;
-  if (!r?.flight || !state.aoi) return;
-  const mission = {
+  if (!r?.flight || !state.aoi) return null;
+  return {
     format: '3dm-mission', version: 1, created: new Date().toISOString(),
     block: state.aoi, params: { ...DEFAULTS, ...planOpts() }, dem: state.dem?.name,
     sensor: isPhoto() ? { kind: 'photo', camera: camera(), frontlapPct: state.survey.frontlap, exposureS: 1 / state.survey.shutterInv, plan: r.photo }
@@ -778,6 +868,16 @@ $('exportJson').onclick = () => {
     home: state.home ? { lon: state.home[0], lat: state.home[1], groundH: r.transit?.homeElev ?? null } : null,
     takeoff: { ...TAKEOFF_DEFAULTS, ...state.takeoff, rthHeightM: r.transit?.rthHeightM ?? state.takeoff.rthHeightM ?? null },
     resume: state.resume.on ? state.resume : null, stats: r.st, coverage: r.cov && { ...r.cov, swaths: undefined }, issues: r.issues,
+    sortieBudgetMin: state.survey.sortieMin,
+    sorties: (r.sp?.sorties ?? []).map(so => ({
+      index: so.index, fromLine: so.fromLine, toLine: so.toLine, minutes: +so.time.total.toFixed(2), time: so.time,
+      transit: so.transit && { distanceM: so.transit.distanceM, minClearanceM: so.transit.minClearanceM, rthHeightM: so.transit.rthHeightM, path: so.transit.path },
+      waypoints: so.route.wps.map((w, i) => ({
+        i, role: w.role, line: w.line ?? null, lat: +w.lat.toFixed(8), lon: +w.lon.toFixed(8),
+        h: +w.h.toFixed(2), hWrite: +w.hWrite.toFixed(2), speed: w.speed, dampingM: +w.dampingM.toFixed(2),
+        turnMode: w.turnMode, actions: w.actions,
+      })),
+    })),
     heightNote: 'h = orthometric (DEM datum). hWrite = h + geoidN; geoid handling pending the RC sample export.',
     waypoints: r.flight.wps.map((w, i) => ({
       i, role: w.role, line: w.line ?? null, lat: +w.lat.toFixed(8), lon: +w.lon.toFixed(8),
@@ -785,11 +885,58 @@ $('exportJson').onclick = () => {
       turnMode: w.turnMode, actions: w.actions,
     })),
   };
+}
+$('exportJson').onclick = () => {
+  const mission = buildMission();
+  if (!mission || !state.aoi) return;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(mission, null, 1)], { type: 'application/json' }));
   a.download = `${state.aoi.name.replace(/[^\w.-]+/g, '_')}${state.resume.on ? `_resume_L${state.resume.fromLine}` : ''}.mission.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
+// ── Sync to RC ───────────────────────────────────────────────────
+const apiUrl = $<HTMLInputElement>('apiUrl'), apiToken = $<HTMLInputElement>('apiToken');
+try {
+  apiUrl.value = localStorage.getItem('3dm.apiUrl') ?? '';
+  apiToken.value = localStorage.getItem('3dm.apiToken') ?? '';
+} catch { /* ignore */ }
+if (import.meta.env.DEV) {
+  if (!apiUrl.value && import.meta.env.VITE_API_URL) apiUrl.value = import.meta.env.VITE_API_URL;
+  if (!apiToken.value && import.meta.env.VITE_API_ADMIN_TOKEN) apiToken.value = import.meta.env.VITE_API_ADMIN_TOKEN;
+}
+for (const [el, key] of [[apiUrl, '3dm.apiUrl'], [apiToken, '3dm.apiToken']] as const) {
+  el.addEventListener('change', () => { try { localStorage.setItem(key, el.value.trim()); } catch { /* ignore */ } });
+}
+const apiCfg = (): ApiCfg | null => (apiUrl.value.trim() && apiToken.value.trim() ? { url: apiUrl.value.trim(), token: apiToken.value.trim() } : null);
+const syncInfo = (msg: string, err = false) => { const el = $('syncInfo'); el.textContent = msg; el.classList.toggle('err', err); };
+
+$('publishBtn').onclick = async () => {
+  const cfg = apiCfg(), mission = buildMission();
+  if (!cfg) { syncInfo('Enter the sync server URL and office token.', true); return; }
+  if (!mission || !state.aoi) return;
+  const btn = $<HTMLButtonElement>('publishBtn');
+  btn.disabled = true; syncInfo('Publishing…');
+  try {
+    const note = `${isPhoto() ? 'Photo' : 'LiDAR'} · ${state.result?.sp?.sorties.length ?? 1} sortie(s) · ${new Date().toLocaleString('en-ZA')}`;
+    const { project, version } = await publish(cfg, state.aoi.name, mission, state.demBuf, note);
+    syncInfo(`Published "${project.name}" v${version.n}: ${version.manifest?.sortieCount ?? 0} sortie(s), mission ${(version.mission_size / 1024).toFixed(0)} kB${version.dem_size ? `, DEM ${(version.dem_size / 1048576).toFixed(1)} MB` : ', no DEM (demo terrain)'}. Paired RCs pick it up on their next sync.`);
+  } catch (e) {
+    syncInfo('Publish failed: ' + (e as Error).message, true);
+  } finally { btn.disabled = false; }
+};
+$('pairBtn').onclick = async () => {
+  const cfg = apiCfg();
+  if (!cfg) { syncInfo('Enter the sync server URL and office token.', true); return; }
+  try {
+    const { code, expiresAt } = await newPairingCode(cfg);
+    const el = $('pairCode');
+    el.hidden = false;
+    el.innerHTML = `<b>${code.replace(/(.{4})/, '$1 ')}</b><span>Enter this code in 3DM Fly on the RC. Valid until ${new Date(expiresAt).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}, single use.</span>`;
+    const devs = await listDevices(cfg);
+    syncInfo(`${devs.filter(d => !d.revoked).length} RC(s) paired.`);
+  } catch (e) { syncInfo('Pairing failed: ' + (e as Error).message, true); }
 };
 
 // ── Start ────────────────────────────────────────────────────────
