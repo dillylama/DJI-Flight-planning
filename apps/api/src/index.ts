@@ -59,6 +59,8 @@ async function dispatch(req: Request, env: Env): Promise<Response> {
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
+    // Deployed on Pages: everything outside /api is the static planner.
+    if (env.ASSETS && !new URL(req.url).pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
     if (req.method === 'OPTIONS') return preflight(req, env);
     let res: Response;
     try {

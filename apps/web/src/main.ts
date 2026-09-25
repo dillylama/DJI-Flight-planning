@@ -959,6 +959,8 @@ try {
 if (import.meta.env.DEV) {
   if (!apiUrl.value && import.meta.env.VITE_API_URL) apiUrl.value = import.meta.env.VITE_API_URL;
   if (!apiToken.value && import.meta.env.VITE_API_ADMIN_TOKEN) apiToken.value = import.meta.env.VITE_API_ADMIN_TOKEN;
+} else if (!apiUrl.value) {
+  apiUrl.value = location.origin;   // production: planner and sync API are served from the same origin
 }
 for (const [el, key] of [[apiUrl, '3dm.apiUrl'], [apiToken, '3dm.apiToken']] as const) {
   el.addEventListener('change', () => { try { localStorage.setItem(key, el.value.trim()); } catch { /* ignore */ } });
