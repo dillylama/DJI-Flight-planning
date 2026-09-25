@@ -96,3 +96,7 @@ DEM clip (AOI + buffer), offline basemap tiles.
 - Operator is experienced (BVLOS-rated, LiDAR specialist): explain physics precisely, flag
   corrections clearly, don't oversimplify.
 - Local tooling: Node 24, git, gh. No Android SDK / JDK 17 yet (only Java 8) — needed for apps/rc.
+
+## Progress tracker
+- docs/progress.html is the project timeline/gates page, published as an artifact (URL in memory). Update it and
+  republish at every milestone; commit docs-only changes straight to main.

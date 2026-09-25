@@ -1,0 +1,221 @@
+<title>M400 LiDAR Mission System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #f5f4f1; --panel: #ffffff; --line: #d9d6cf; --text: #1c1c1c; --muted: #6b6a66;
+    --accent: #f27649; --accent-ink: #1c1c1c; --ok: #2f8f5b; --warn: #b7791f; --bad: #c0392b; --info: #2b6cb0;
+    --done-bg: #e6f2ea; --now-bg: #fdeee7; --next-bg: #f2f1ee;
+    --sans: 'Barlow Semi Condensed', system-ui, sans-serif; --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1c1c1c; --panel: #262626; --line: #3d3d3d; --text: #cfcfce; --muted: #8f8f8d;
+      --ok: #6fd08c; --warn: #ffb020; --bad: #ff6b6b; --info: #7fb8ff;
+      --done-bg: #1f2e25; --now-bg: #3a2a22; --next-bg: #2b2b2b; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1c1c1c; --panel: #262626; --line: #3d3d3d; --text: #cfcfce; --muted: #8f8f8d;
+    --ok: #6fd08c; --warn: #ffb020; --bad: #ff6b6b; --info: #7fb8ff;
+    --done-bg: #1f2e25; --now-bg: #3a2a22; --next-bg: #2b2b2b; color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--text); font: 16px/1.45 var(--sans); padding-block: 0 48px; padding-inline: 16px; }
+  .wrap { max-width: 1040px; margin: 0 auto; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px 20px; padding: 28px 0 14px; border-bottom: 3px solid var(--accent); }
+  header h1 { margin: 0; font-size: 30px; font-weight: 700; letter-spacing: .01em; text-wrap: balance; }
+  header h1 .mark { font-family: var(--mono); background: var(--accent); color: var(--accent-ink); padding: 2px 8px; border-radius: 3px; font-size: 22px; margin-right: 6px; vertical-align: middle; }
+  .updated { font: 13px var(--mono); color: var(--muted); margin-left: auto; }
+  h2 { font-size: 13px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 34px 0 12px; }
+  h3 { font-size: 17px; margin: 0 0 4px; font-weight: 600; }
+  p { max-width: 70ch; margin: 0 0 10px; }
+  a { color: var(--accent); }
+  .status-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 16px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; }
+  .tile .k { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .tile .v { font: 600 22px/1.2 var(--mono); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .tile .s { font-size: 13px; color: var(--muted); }
+  .banner { margin-top: 16px; padding: 12px 14px; border-left: 4px solid var(--bad); background: var(--panel); border-radius: 0 6px 6px 0; }
+  .banner b { color: var(--bad); }
+  .pill { display: inline-block; font: 600 11px/1 var(--mono); letter-spacing: .06em; padding: 4px 7px; border-radius: 3px; text-transform: uppercase; white-space: nowrap; }
+  .pill.done { background: var(--done-bg); color: var(--ok); }
+  .pill.now { background: var(--now-bg); color: var(--accent); }
+  .pill.next { background: var(--next-bg); color: var(--muted); }
+  .pill.blocked { background: var(--now-bg); color: var(--bad); }
+  .pill.luke { background: var(--next-bg); color: var(--info); }
+  .timeline { display: grid; gap: 10px; }
+  .step { display: grid; grid-template-columns: 96px 1fr; gap: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; }
+  .step.now { border-color: var(--accent); }
+  .step .when { font: 500 13px var(--mono); color: var(--muted); padding-top: 3px; }
+  .step .when b { display: block; color: var(--text); font-weight: 600; }
+  .step ul { margin: 6px 0 0; padding-left: 18px; }
+  .step li { margin: 2px 0; }
+  .gate { font: 600 12px var(--mono); color: var(--accent); letter-spacing: .06em; }
+  .pass { font-size: 14px; color: var(--muted); margin-top: 6px; }
+  .pass b { color: var(--text); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; }
+  .card ul { margin: 4px 0 0; padding-left: 18px; }
+  .card li { margin: 4px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  td.m { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+  .scroll { overflow-x: auto; }
+  .log { font-size: 14px; }
+  .log .d { font: 500 13px var(--mono); color: var(--muted); }
+  @media (max-width: 640px) { .two { grid-template-columns: 1fr; } .step { grid-template-columns: 1fr; } header h1 { font-size: 24px; } }
+</style>
+
+<div class="wrap">
+<header>
+  <h1><span class="mark">3DM</span>M400 + Zenmuse L3 mission system</h1>
+  <span class="updated" id="updated">Updated 25 Sep 2026, 13:40 SAST</span>
+</header>
+
+<div class="status-row">
+  <div class="tile"><div class="k">Build</div><div class="v">8 / 8</div><div class="s">PRs merged on main</div></div>
+  <div class="tile"><div class="k">Tests</div><div class="v">48</div><div class="s">core 33 + API 15, all passing</div></div>
+  <div class="tile"><div class="k">Planner</div><div class="v">Live</div><div class="s"><a href="https://planner.3dronemapping.com">planner.3dronemapping.com</a></div></div>
+  <div class="tile"><div class="k">Flights flown</div><div class="v">0</div><div class="s">nothing imported or flown yet</div></div>
+  <div class="tile"><div class="k">Next gate</div><div class="v">G1</div><div class="s">Pilot 2 import test (Luke, RC)</div></div>
+</div>
+
+<div class="banner"><b>Safety status:</b> the planner writes files that match Pilot 2's own output exactly, but no route it produced has been imported or flown. Until gates G1–G3 below pass, treat every route as unproven. An independent adversarial review of the height and speed code is running today (25 Sep).</div>
+
+<h2>What "working" means, and the gates to get there</h2>
+<p>Each gate proves one link in the chain, from a file on the RC to a point cloud from a real job. A gate must pass cleanly before the next; a failure means we fix and repeat, not skip.</p>
+
+<div class="timeline">
+  <div class="step">
+    <div class="when"><b>25 Sep</b>done</div>
+    <div>
+      <span class="pill done">Done</span> <h3>Office planner, sync server, route-file writer</h3>
+      <ul>
+        <li>Planner live at planner.3dronemapping.com: block import, GLO-30 terrain, LiDAR/photogrammetry modes, M400 limits, home/take-off/RTH checks, sorties, 3D view, overlaps.</li>
+        <li>Route files built from Luke's two Pilot 2 exports; our file reproduces Pilot 2's field for field (M400 = 103, L3 = 117, EGM96 heights to 0.1 mm).</li>
+        <li>Terrain-following speed limiter (climb 4 / descent 3 m/s), figure-8 at both ends, DJI IMU calibration before/after.</li>
+        <li>Sync server on Cloudflare (D1 + R2): publish, RC pairing codes, downloads, log upload. Phase 0 RC test app built (not yet run).</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step now">
+    <div class="when"><b>25–26 Sep</b>now</div>
+    <div>
+      <span class="pill now">In progress</span> <h3>Safety hardening</h3>
+      <ul>
+        <li>Adversarial review of heights, speed limiter, transit/RTH, DEM reading and the file writer (running).</li>
+        <li>Add a terrain-uncertainty margin (GLO-30 is a 30 m surface model, ±4 m and worse on slopes, includes canopy).</li>
+        <li>Check that fly-through turns, which cut inside the corner, stay inside the sampled terrain corridor.</li>
+        <li>Fix anything the review raises before G1.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="when"><b>Week of 29 Sep</b>needs the RC</div>
+    <div>
+      <span class="pill luke">Luke</span> <span class="gate">GATE G1</span> <h3>Pilot 2 import test (no aircraft needed)</h3>
+      <ul>
+        <li>Import the files in <span class="m">Downloads\m400-import-tests\</span> into Pilot 2 on the RC.</li>
+        <li><b>test-01</b>: does it import, draw in the right place, and show "start point cloud recording", IMU calibration and "stop" on its waypoints?</li>
+        <li><b>test-cap-0250 … 5000</b>: the largest file that imports cleanly is our waypoint cap per route.</li>
+        <li>Also: does Pilot 2's Waypoint Route editor offer "Start point cloud recording" as an action for the L3?</li>
+      </ul>
+      <div class="pass"><b>Pass:</b> test-01 imports with all actions visible; a cap number is known. <b>Fail:</b> any rejection or silently dropped action → we adjust the writer and repeat.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="when"><b>Week of 29 Sep</b>RC + M400, props off</div>
+    <div>
+      <span class="pill luke">Luke</span> <span class="gate">GATE G2</span> <h3>Bench test in the DJI simulator (Phase 0 app)</h3>
+      <ul>
+        <li>Install <span class="m">app-debug.apk</span> on the RC (needs internet once to register the DJI key). Script in <span class="m">apps/rc/README.md</span>.</li>
+        <li>SDK registers, M400 connects, telemetry shows; L3 detected on its port; recording start/stop works from the app.</li>
+        <li>Push and run <b>test-01</b> in the simulator. Watch: altitude vs waypoint heights, speed on slowed legs (does it ramp to the next waypoint's speed?), L3 recording on the approach point, calibration passes.</li>
+        <li>Read-only probe of Pilot 2's route storage.</li>
+        <li>Send the log file back (<span class="m">adb pull … /files/logs</span>).</li>
+      </ul>
+      <div class="pass"><b>Pass:</b> mission runs to the end with altitude within a few metres of plan and recording controlled as planned. <b>Fail on L3 keys:</b> the RC app becomes sync + Pilot 2 injection only; flying stays in Pilot 2.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="when"><b>Early Oct</b>after G2</div>
+    <div>
+      <span class="pill luke">Luke</span> <span class="gate">GATE G3</span> <h3>First live flight: small, flat, high, in sight</h3>
+      <ul>
+        <li>Block about 300 × 300 m of flat open ground, 120 m AGL, 8–10 m/s, VLOS, RTH height set on the aircraft above the planned route.</li>
+        <li>Fly the planner's KMZ via Pilot 2 (or the app if G2 passed). Pilot ready to take over at any point.</li>
+        <li>Afterwards: compare the flight log to the plan (heights, speeds, where recording started/stopped); process in DJI Terra and check IMU alignment quality.</li>
+      </ul>
+      <div class="pass"><b>Pass:</b> flown as planned, point cloud continuous, no manual intervention. Then repeat once over gentle terrain with slowed legs before any steep block.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="when"><b>Oct</b>parallel build</div>
+    <div>
+      <span class="pill next">Next build</span> <h3>RC app v1 ("3DM Fly")</h3>
+      <ul>
+        <li>Sync client (pull published missions offline), pre-flight checklist (RTK, IMU, L3 ready, SD space, battery vs sortie, RTH height vs terrain).</li>
+        <li>Fly and monitor: current line/waypoint, AGL vs DEM, recording state with alarm, time to go vs battery.</li>
+        <li>Auto-resume after a stop with a fresh figure-8; sortie sequencing; as-flown logs back to the office.</li>
+        <li>Pilot 2 path: write KMZ for "Import route" (file injection is unofficial on Android 11).</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="when"><b>Mid Oct</b>first real job</div>
+    <div>
+      <span class="pill next">Gate G4</span> <h3>Production job</h3>
+      <ul>
+        <li>Real block with the L3 at the chosen pulse rate, sorties as planned, resume tested once on purpose.</li>
+        <li>Deliverable checked in Terra: strip alignment, density, coverage vs the planner's overlap prediction.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<h2>Open items</h2>
+<div class="two">
+  <div class="card">
+    <h3>Needs Luke</h3>
+    <ul>
+      <li>G1 import test results (files in <span class="m">Downloads\m400-import-tests\</span>).</li>
+      <li>G2 bench test with the RC and M400 (props off).</li>
+      <li>Decide on Cloudflare Access (email sign-in) for the office side of the planner.</li>
+      <li>Optional: a Pilot 2 export with a different scan mode / return count, so those values can be verified too.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>Claude, in order</h3>
+    <ul>
+      <li>Act on the safety review; add the terrain-uncertainty margin and turn-corridor check.</li>
+      <li>Keep this page current at every milestone.</li>
+      <li>After G1: adjust the writer if needed, set the waypoint cap in the planner.</li>
+      <li>After G2: start RC app v1.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Where things live</h2>
+<div class="scroll"><table>
+  <tr><th>Thing</th><th>Where</th></tr>
+  <tr><td>Planner (live)</td><td class="m"><a href="https://planner.3dronemapping.com">https://planner.3dronemapping.com</a></td></tr>
+  <tr><td>Code</td><td class="m"><a href="https://github.com/dillylama/DJI-Flight-planning">github.com/dillylama/DJI-Flight-planning</a></td></tr>
+  <tr><td>Import test files</td><td class="m">C:\Users\luke\Downloads\m400-import-tests\</td></tr>
+  <tr><td>RC test app</td><td class="m">C:\Claude\M400\apps\rc\app\build\outputs\apk\debug\app-debug.apk</td></tr>
+  <tr><td>Office token for the planner</td><td class="m">C:\Claude\M400\deploy\planner\admin-token.local</td></tr>
+  <tr><td>Research notes</td><td class="m">docs/ugcs-notes.md, docs/wpml.md, docs/equipment.md, docs/msdk-research.md</td></tr>
+</table></div>
+
+<h2>Change log</h2>
+<div class="log">
+  <p><span class="d">25 Sep 13:40</span> Page created. PR #8 merged and deployed: terrain-following speed limiter, figure-8 at both ends, overlap bands. Safety review started.</p>
+  <p><span class="d">25 Sep</span> Sync server and planner deployed to Cloudflare; planner.3dronemapping.com live. Route-file writer built from Luke's Pilot 2 samples. Sortie splitting.</p>
+  <p><span class="d">25 Sep</span> Planner v0.1–0.3: 3D view, home/RTH, sensors and M400 limits, 3DM branding. Phase 0 RC app built.</p>
+</div>
+</div>
