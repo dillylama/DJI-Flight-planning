@@ -18,3 +18,4 @@ test/preview.svg
 samples/*.kmz
 samples/extracted/
 samples/generated/
+deploy/planner/dist/

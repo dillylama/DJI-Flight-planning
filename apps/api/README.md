@@ -7,8 +7,8 @@ It links the office planner to the RC. The planner publishes **immutable mission
 The RC Plus 2 (*3DM Fly*) pairs once with a one-time code, pulls the latest version of every project
 while it has internet, and uploads as-flown logs when it's back in coverage.
 
-Status: runs locally only (`wrangler dev --local` / Miniflare). **Nothing has been deployed** and no
-Cloudflare resources exist yet. See [Deploy (NOT done yet)](#deploy-not-done-yet).
+Status: **live** at https://m400-planner.pages.dev/api (Cloudflare Pages + D1 + R2); see
+[Deploy](#deploy-live-since-25-sep-2026). Local dev runs in Miniflare (`wrangler dev --local`).
 
 ## Layout
 
@@ -101,33 +101,15 @@ npm run typecheck -w @3dm/api
 
 New schema changes go in `migrations/000N_*.sql`. Don't edit `0001_init.sql` after it has been applied remotely.
 
-## Deploy (NOT done yet)
+## Deploy (live since 25 Sep 2026)
 
-Nothing below has been run. Each step is Luke's decision or action:
-
-1. **Cloudflare account**: choose which account and zone hosts it (Workers Free is enough to start; Paid
-   raises CPU time and the request body limit is 100 MB on Free/Pro, which covers 20 MB + 60 MB uploads).
-   `npx wrangler login` (from `apps/api`).
-2. **D1**: `npx wrangler d1 create m400-api`. Put the printed `database_id` into `wrangler.jsonc`
-   (it currently holds the placeholder `00000000-…`, marked TODO). Then
-   `npm run db:migrate:remote -w @3dm/api`.
-3. **R2**: `npx wrangler r2 bucket create m400-packages` (or pick another name and update
-   `bucket_name`). Choose a location hint / jurisdiction if client data residency matters.
-4. **Secret**: `npx wrangler secret put ADMIN_TOKEN` (a new random 32-byte value, not the dev one).
-5. **Custom domain**: pick one (e.g. `api.<domain>`) and add a `routes` entry with `custom_domain: true`
-   in `wrangler.jsonc` (a commented example is there). You could use `*.workers.dev` instead, but see 7.
-6. **ALLOWED_ORIGINS**: set it to the production planner origin(s) (Cloudflare Pages URL / custom domain)
-   in `wrangler.jsonc` `vars`.
-7. **Recommended: Cloudflare Access in front of the office routes** (`/api/projects*`, `/api/pairing`,
-   `/api/devices*`, `/api/logs*`). Use a self-hosted Access application with an email/IdP policy for the office
-   staff. Leave `/api/device/*` and `/api/health` outside Access (the RC authenticates with its own token).
-   The bearer `ADMIN_TOKEN` then becomes a second factor rather than the only one. Also consider a
-   Cloudflare rate-limiting rule on `POST /api/device/pair`.
-8. `npx wrangler deploy` from `apps/api`, then `curl https://<domain>/api/health`.
+Production runs as the Cloudflare Pages project **m400-planner** (planner + this API as `_worker.js`, same origin),
+with D1 `m400-api` and R2 `m400-packages`. Build + deploy with `node deploy/planner/deploy.mjs`.
+Custom domain, secrets and Cloudflare Access notes: [deploy/planner/README.md](../../deploy/planner/README.md).
 
 ## TODO
 
-- Planner UI: publish button (multipart upload), pairing QR, device list/revoke, log viewer.
+- Planner UI: publish and pairing code are done; still to do: pairing QR, device list/revoke, log viewer.
 - RC side: sync client using `mission.sha256` + `If-None-Match` to skip unchanged downloads.
 - Package extras from `docs/architecture.md` (`sorties/NN.kmz`, `tiles/`) aren't stored yet. Only
   `mission.json` + `dem.tif` are. Extend the multipart fields when the planner produces them.

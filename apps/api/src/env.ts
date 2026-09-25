@@ -5,6 +5,8 @@ export interface Env {
   ADMIN_TOKEN?: string;
   /** Comma-separated planner origins allowed by CORS. Default http://localhost:5178. */
   ALLOWED_ORIGINS?: string;
+  /** Static planner assets when deployed as a Cloudflare Pages `_worker.js` (planner + API on one origin). */
+  ASSETS?: { fetch(req: Request): Promise<Response> };
 }
 
 export interface Ctx {

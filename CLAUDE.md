@@ -69,9 +69,12 @@ DEM clip (AOI + buffer), offline basemap tiles.
 3. RC app: sync/offline, pre-flight checklist, fly/monitor, auto-resume, sorties, as-flown logs.
 4. Pilot 2 injection path. 5. Field validation (WP cap, simulator, short live block).
 
-## Sync backend (apps/api)
-- Worker + D1 + R2, local only so far (dev on port 8788; 8787 is SurveyDeliver). Admin token in apps/api/.dev.vars.
-- Deploy needs Luke: Cloudflare account, D1/R2 create, ADMIN_TOKEN secret, domain, ALLOWED_ORIGINS, Access.
+## Sync backend (apps/api) + production
+- Local dev on port 8788 (8787 is SurveyDeliver); local admin token in apps/api/.dev.vars.
+- PRODUCTION (25 Sep 2026): Cloudflare Pages project m400-planner (classic Pages, created with --force) serves the
+  planner + API (_worker.js) at https://m400-planner.pages.dev; D1 m400-api, R2 m400-packages; ADMIN_TOKEN secret
+  (value in deploy/planner/admin-token.local). Deploy: node deploy/planner/deploy.mjs. See deploy/planner/README.md.
+- 3dronemapping.com DNS is at Wix → custom domain planner.3dronemapping.com needs a Wix CNAME (Luke).
 - Planner dev prefill: apps/web/.env.development.local (VITE_OPENTOPO_KEY, VITE_API_URL, VITE_API_ADMIN_TOKEN).
 
 ## Sorties (packages/core/src/sorties.ts)

@@ -1,0 +1,21 @@
+// Cloudflare Pages project "m400-planner": the office planner (static, apps/web) + the sync API
+// (apps/api bundled as dist/_worker.js) on ONE origin. Pages is used instead of a plain Worker because
+// 3dronemapping.com's DNS is at Wix: Pages accepts a subdomain via a CNAME to m400-planner.pages.dev.
+//   Build + deploy: node deploy/planner/deploy.mjs
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "m400-planner",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-09-01",
+  "send_metrics": false,
+  "vars": {
+    "ALLOWED_ORIGINS": "https://planner.3dronemapping.com,https://m400-planner.pages.dev"
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "m400-api", "database_id": "ee4a18fb-9535-491f-bb31-fa4b94398a7c" }
+  ],
+  "r2_buckets": [
+    { "binding": "BUCKET", "bucket_name": "m400-packages" }
+  ]
+  // ADMIN_TOKEN is a Pages secret: `npx wrangler pages secret put ADMIN_TOKEN --project-name m400-planner`
+}
