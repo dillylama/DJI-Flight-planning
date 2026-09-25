@@ -2,7 +2,7 @@ import { egm96ToEllipsoid } from 'egm96-universal';
 import JSZip from 'jszip';
 import { dist } from './geo.ts';
 import type { FlightWp } from './heights.ts';
-import type { Route } from './route.ts';
+import { legSpeed, type Route } from './route.ts';
 import { TAKEOFF_DEFAULTS, type TakeoffOptions } from './takeoff.ts';
 
 // DJI WPML writer for the M400 + Zenmuse L3. Every element and value below is copied from real Pilot 2
@@ -145,7 +145,7 @@ export function writeWpml(route: Route<FlightWp>, opts: WpmlOptions = {}): WpmlF
   let distanceM = 0, durationS = 0;
   for (let i = 1; i < wps.length; i++) {
     const d = Math.hypot(dist(wps[i].xy, wps[i - 1].xy), wps[i].h - wps[i - 1].h);
-    distanceM += d; durationS += d / wps[i].speed;
+    distanceM += d; durationS += d / legSpeed(wps, i - 1);
   }
   const groups = buildGroups(route, { payloadPositionIndex: pos, djiImuCalibration: opts.djiImuCalibration ?? false, rgb: opts.rgbPhotoSpacingM ?? null });
   const now = opts.createTime ?? Date.now();

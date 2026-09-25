@@ -17,8 +17,8 @@ const ts = { planLines, buildRoute, applyHeights, stats };
 const legacy: typeof ts = createRequire(import.meta.url)('../../../route-engine.js');
 
 function run(E: typeof ts, opts: { fromLine?: number; speedMs?: number } = {}) {
-  const plan = E.planLines(poly, { courseDeg: 20 });
-  const route = E.applyHeights(plan, E.buildRoute(plan, opts), elev);
+  const plan = E.planLines(poly, { courseDeg: 20, verticalMode: 'raise', alignStraightS: 0, corridorM: 75, demSampleM: 75 });   // legacy: raise mode, 2.5 r approach, 3 corridor samples, no end figure-8
+  const route = E.applyHeights(plan, E.buildRoute(plan, { ...opts, fig8End: false }), elev);
   return { route, s: E.stats(plan, route) };
 }
 
@@ -33,7 +33,7 @@ test('full job matches known baseline', () => {
 for (const [name, opts] of [['full', {}], ['resume line 9 @14 m/s', { fromLine: 9, speedMs: 14 }]] as const) {
   test(`parity with legacy route-engine.js: ${name}`, () => {
     const a = run(ts, opts), b = run(legacy, opts);
-    assert.deepEqual(a.s, b.s);
+    for (const [k, v] of Object.entries(b.s)) assert.ok(Math.abs(((a.s as unknown as Record<string, number>)[k]) - (v as number)) < 1e-9, `stat ${k}`);   // legacy stats keys only
     assert.equal(a.route.startIdx, b.route.startIdx);
     assert.equal(a.route.wps.length, b.route.wps.length);
     a.route.wps.forEach((w, i) => {

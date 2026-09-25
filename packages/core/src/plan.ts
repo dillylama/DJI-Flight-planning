@@ -11,11 +11,16 @@ export interface PlanOptions {
   wpSpacingM: number;      // max waypoint spacing along lines
   corridorM: number;       // lateral buffer when finding max terrain under the path
   demSampleM: number;      // DEM sampling step (GLO-30 native)
-  maxGradient: number;     // max climb/descent between waypoints (rise/run)
+  verticalMode: 'slow' | 'raise'; // 'slow': follow terrain, slow legs to the climb/descent limits; 'raise': keep speed, raise waypoints
+  climbMs: number;         // vertical rate limits used by 'slow' (conservative M400 values; see equipment.ts)
+  descentMs: number;
+  minLegSpeedMs: number;   // floor for a slowed leg; a leg needing less is flagged as too steep
+  maxGradient: number;     // 'raise' mode: max climb/descent between waypoints (rise/run)
   geoidN: number;          // added to DEM (orthometric) height when writing ellipsoidal heights
   fig8BankDeg: number;
   fig8RadiusM: number | null; // null = computed from speed + bank
   fig8PtsPerLoop: number;
+  alignStraightS: number;  // straight level flight before the first figure-8 and after the last one, in seconds (≥ 2.5 radii)
   dampingFrac: number;     // damping distance as fraction of the shorter adjacent leg
   dampingMaxM: number;
 }
@@ -31,11 +36,16 @@ export const DEFAULTS: PlanOptions = {
   wpSpacingM: 150,
   corridorM: 75,
   demSampleM: 30,
+  verticalMode: 'slow',
+  climbMs: 4,
+  descentMs: 3,
+  minLegSpeedMs: 1,
   maxGradient: 0.15,
   geoidN: 0,
   fig8BankDeg: 25,
   fig8RadiusM: null,
   fig8PtsPerLoop: 12,
+  alignStraightS: 12,
   dampingFrac: 0.4,
   dampingMaxM: 60,
 };
