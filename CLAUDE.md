@@ -42,6 +42,13 @@ DEM clip (AOI + buffer), offline basemap tiles.
   template.kml heightMode EGM96. `recordPointCloud` action documented for M300/M350 only.
 - Pilot 2 file injection is unofficial; prefer flying from our app, or Import Route / Cloud API library.
 
+## Equipment (docs/equipment.md, packages/core/src/equipment.ts)
+- M400 official: 25 m/s, ascent 10 / descent 8 m/s, wind 12 m/s; flight time only published with H30T.
+  Planner uses conservative limits (~40–60 % of max) and 30 min usable per battery set with L3.
+- L3 pulse rate → max AGL: 100 kHz <500 m, 350 kHz <300 m, 1000 kHz <100 m, 2000 kHz <50 m (RTF).
+- DJI documents NO figure-8 for L3 (it auto-calibrates inside Area Routes); ours is optional, default on.
+- Planner supports LiDAR (L3) and photogrammetry (P1 24/35/50, L3 RGB) modes.
+
 ## Blocked on (do NOT guess — wrong values = Pilot 2 rejects file or L3 doesn't record)
 1. L3 `payloadEnumValue` etc. for the WPML header (M400 drone enum 103 is verified — still confirm from the sample).
 2. Exact WPML action XML for start/stop point-cloud recording.

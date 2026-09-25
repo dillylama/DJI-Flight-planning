@@ -33,6 +33,14 @@ Working now:
 - **Tooltips** on every option explaining what it does and the physics behind it.
 - Export `mission.json` (includes home and take-off settings). KMZ export waits for the RC sample.
 - A demo block (synthetic Nimba ridge) to try it without files.
+- **Sensor modes**: LiDAR (L3 pulse rate + scan mode, density estimate, L3 RGB GSD/frontlap, optional
+  figure-8) or photogrammetry (P1 24/35/50 mm, L3 RGB; target GSD ↔ AGL, frontlap, exposure, blur,
+  interval vs camera minimum). Specs in [docs/equipment.md](../../docs/equipment.md).
+- **M400 limits** (conservative): speed, climb/descent rate per leg, bank, sorties per battery set, and the L3
+  pulse-rate max AGL / slant range are all checked.
+- **Layers** menu: show or hide block, data lines, turns, figure-8, waypoints, record markers, swaths,
+  drop lines, transit and RTH.
+- The DEM is cached in the browser (IndexedDB) and survives reloads. 3DroneMapping colour scheme.
 
 In dev, the OpenTopography key can be put in `apps/web/.env.development.local` as `VITE_OPENTOPO_KEY=` (gitignored,
 not included in production builds).
