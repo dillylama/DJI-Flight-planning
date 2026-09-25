@@ -11,6 +11,9 @@
   --c-fig8: #ffb020;
   --c-appr: #ff5d5d;
   --c-aoi: #3fa9f5;
+  --c-transit: #e6f0ff;
+  --c-rth: #d86bff;
+  --c-swath: #3fa9f5;
   --c-err: #ff4d6d;
   --c-warn: #ffb020;
   --c-info: #6fb6ff;
@@ -108,3 +111,29 @@ main { grid-area: main; display: grid; grid-template-rows: 1fr 280px; min-height
 .issue.error b { color: var(--c-err); } .issue.warn b { color: var(--c-warn); } .issue.info b { color: var(--c-info); } .issue.ok b { color: var(--c-line); }
 
 .maplibregl-ctrl-attrib { font-size: 11px; }
+
+.span2 { grid-column: span 2; }
+.note.inline { margin: 0; font-family: var(--mono); font-size: 12px; }
+button.active { border-color: var(--accent); background: rgba(63, 169, 245, .18); color: var(--text); }
+.map-toggles { position: absolute; top: 10px; right: 50px; display: flex; gap: 6px; }
+.map-toggles button { background: rgba(11, 15, 20, .85); }
+.legend { flex-wrap: wrap; max-width: calc(100% - 200px); }
+.pick-hint {
+  position: absolute; top: 50px; left: 50%; transform: translateX(-50%); padding: 6px 12px; font-size: 14px;
+  background: var(--accent); color: #041018; border-radius: 4px; font-weight: 600;
+}
+.home-marker {
+  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; cursor: grab;
+  background: #fff; color: #041018; font: 700 14px var(--sans); border: 3px solid var(--accent); box-shadow: 0 1px 6px rgba(0, 0, 0, .6);
+}
+#tooltip {
+  position: fixed; z-index: 1000; max-width: 320px; padding: 8px 10px; pointer-events: none; white-space: pre-line;
+  background: #1d2a38; color: var(--text); border: 1px solid var(--accent); border-radius: 4px; font-size: 13px; line-height: 1.4;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .5);
+}
+[data-tip] { cursor: help; }
+[data-tip] input, [data-tip] select, button[data-tip] { cursor: auto; }
+button[data-tip] { cursor: pointer; }
+.stats div[data-tip] span { text-decoration: underline dotted rgba(130, 149, 168, .6); text-underline-offset: 3px; }
+.fields label[data-tip] { text-decoration: none; }
+.fields label[data-tip]::first-line { text-decoration: underline dotted rgba(130, 149, 168, .6); }
