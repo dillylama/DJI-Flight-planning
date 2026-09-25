@@ -48,21 +48,21 @@ IMU-calibration figure-8, and breakpoint resume that can't be trusted. This syst
 | Path | What | Status |
 |---|---|---|
 | [`packages/core`](packages/core) | Route engine, WPML writer/reader, DEM sampling, validation, sorties, resume, mission package. Shared by web and RC. | Engine ported ✅, rest in progress |
-| [`apps/web`](apps/web) | Office planner (Vite + TypeScript + MapLibre), deployed to Cloudflare Pages | Planned |
+| [`apps/web`](apps/web) | Office planner (Vite + TypeScript + MapLibre), deployed to Cloudflare Pages | v0.1 working locally |
 | [`apps/api`](apps/api) | Cloudflare Worker + D1 + R2: projects, mission packages, RC pairing, as-flown logs | Planned |
 | [`apps/rc`](apps/rc) | Android app for the RC Plus 2 Enterprise (Kotlin, DJI MSDK v5 + UX SDK) | Planned |
 | [`index.html`](index.html) | **Legacy** single-file KMZ patcher (still live on GitHub Pages) | Maintenance only |
 | [`route-engine.js`](route-engine.js) | **Legacy** JS engine; the reference for the TypeScript parity test | Retire once core is complete |
 
-More detail: [docs/architecture.md](docs/architecture.md) · Dev setup: [docs/dev-setup.md](docs/dev-setup.md)
+More detail: [docs/architecture.md](docs/architecture.md) · SDK research: [docs/msdk-research.md](docs/msdk-research.md) · Dev setup: [docs/dev-setup.md](docs/dev-setup.md)
 
 ## Roadmap
 
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | **MSDK test build (go/no-go)**: M400 connect + telemetry, L3 detect + record start/stop, KMZ via `WaypointMissionManager` in the simulator, KMZ injection into Pilot 2 | Next (needs RC + aircraft) |
-| 1 | **core**: TypeScript engine ✅, DEM module, validation, sortie split, mission package, WPML writer | In progress |
-| 2 | **web + api**: planner UI, profiles, validation panel, publish, RC pairing via QR | Planned |
+| 1 | **core**: TypeScript engine ✅, DEM module ✅, validation ✅, sortie split, mission package, WPML writer | In progress |
+| 2 | **web + api**: planner UI ✅, profiles ✅, validation panel ✅, terrain-aware course optimiser ✅, publish, RC pairing via QR | In progress |
 | 3 | **RC app**: sync/offline, pre-flight checklist, fly/monitor, auto-resume, sorties, as-flown logs | Planned |
 | 4 | **Pilot 2 injection** workflow | Planned |
 | 5 | **Field validation**: waypoint cap, simulator run, short live block | Planned |

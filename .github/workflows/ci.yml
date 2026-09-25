@@ -1,6 +1,7 @@
 name: CI
 on:
   push:
+    branches: [main]
   pull_request:
 jobs:
   core:
@@ -14,5 +15,6 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run typecheck
+      - run: npm run build -w @3dm/web
       - name: Legacy engine still runs
         run: node test/synthetic-nimba.js
