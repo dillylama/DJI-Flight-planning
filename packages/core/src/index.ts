@@ -7,3 +7,5 @@ export * from './dem.ts';
 export * from './validate.ts';
 export * from './takeoff.ts';
 export * from './coverage.ts';
+export * from './sensor.ts';
+export * from './equipment.ts';

@@ -25,10 +25,11 @@ export interface Route<W extends RouteWp = RouteWp> {
 export interface BuildOptions {
   fromLine?: number;       // line where data stopped; the route restarts one line earlier
   speedMs?: number;
+  fig8?: boolean;          // IMU-excitation figure-8 before the first line (LiDAR); off for photogrammetry
 }
 
 // Full job, or a resume from any line.
-export function buildRoute(plan: Plan, { fromLine = 0, speedMs }: BuildOptions = {}): Route {
+export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true }: BuildOptions = {}): Route {
   const { o, d, c, lines } = plan;
   const v = speedMs || o.speedMs;
   const startIdx = Math.max(0, fromLine - (fromLine > 0 ? 1 : 0));
@@ -48,16 +49,18 @@ export function buildRoute(plan: Plan, { fromLine = 0, speedMs }: BuildOptions =
   const right: XY = [hdg[1], -hdg[0]];
   const approach = add(X, mul(hdg, -2.5 * r));
   push(approach, 'approach', { actions: ['START_RECORD'] });   // recording running before the 8
-  push(X, 'fig8');
-  const loop = (centre: XY, startVec: XY) => {
-    for (let k = 1; k < o.fig8PtsPerLoop; k++) {
-      const t = (2 * Math.PI * k) / o.fig8PtsPerLoop;
-      push(add(centre, add(mul(startVec, r * Math.cos(t)), mul(hdg, r * Math.sin(t)))), 'fig8');
-    }
+  if (fig8) {
     push(X, 'fig8');
-  };
-  loop(add(X, mul(right, -r)), right);          // left lobe
-  loop(add(X, mul(right, r)), mul(right, -1));  // right lobe
+    const loop = (centre: XY, startVec: XY) => {
+      for (let k = 1; k < o.fig8PtsPerLoop; k++) {
+        const t = (2 * Math.PI * k) / o.fig8PtsPerLoop;
+        push(add(centre, add(mul(startVec, r * Math.cos(t)), mul(hdg, r * Math.sin(t)))), 'fig8');
+      }
+      push(X, 'fig8');
+    };
+    loop(add(X, mul(right, -r)), right);          // left lobe
+    loop(add(X, mul(right, r)), mul(right, -1));  // right lobe
+  }
 
   for (let i = startIdx; i < lines.length; i++) {
     const L = lines[i];
