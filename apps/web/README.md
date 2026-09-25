@@ -23,7 +23,18 @@ Working now:
 - Resume ("data stopped on line N" + new speed).
 - **Optimise course**: with terrain loaded it minimises route length × (mean line AGL / nominal),
   which favours lines along slopes (density ∝ 1/AGL); without terrain it picks the fewest lines.
-- Export `mission.json`. KMZ export waits for the RC sample.
+- **Home & take-off**: set home on the map (draggable). Take-off security height, fly-to-route mode
+  (DJI *safely* / *pointToPoint*), transit speed, min terrain clearance. The transit path is checked for
+  terrain clearance; the RTH height (auto = recommended) is checked on the straight line home from every waypoint.
+- **3D view**: routes, take-off transit and RTH drawn at their true heights (deck.gl) over MapLibre 3D terrain
+  (AWS Terrain Tiles, display only), with drop lines from each data waypoint to the ground.
+- **LiDAR overlap**: planned vs achieved sidelap using each waypoint's real AGL, swath range, and swath
+  footprints on the map (darker where strips overlap).
+- **Tooltips** on every option explaining what it does and the physics behind it.
+- Export `mission.json` (includes home and take-off settings). KMZ export waits for the RC sample.
 - A demo block (synthetic Nimba ridge) to try it without files.
+
+In dev, the OpenTopography key can be put in `apps/web/.env.development.local` as `VITE_OPENTOPO_KEY=` (gitignored,
+not included in production builds).
 
 Next: sortie split, IndexedDB project store and DEM cache, publish to `apps/api`.

@@ -62,7 +62,7 @@ More detail: [docs/architecture.md](docs/architecture.md) · SDK research: [docs
 |---|---|---|
 | 0 | **MSDK test build (go/no-go)**: M400 connect + telemetry, L3 detect + record start/stop, KMZ via `WaypointMissionManager` in the simulator, KMZ injection into Pilot 2 | Next (needs RC + aircraft) |
 | 1 | **core**: TypeScript engine ✅, DEM module ✅, validation ✅, sortie split, mission package, WPML writer | In progress |
-| 2 | **web + api**: planner UI ✅, profiles ✅, validation panel ✅, terrain-aware course optimiser ✅, publish, RC pairing via QR | In progress |
+| 2 | **web + api**: planner UI ✅, profiles ✅, validation panel ✅, terrain-aware course optimiser ✅, home/take-off/RTH ✅, 3D view ✅, LiDAR overlap ✅, publish, RC pairing via QR | In progress |
 | 3 | **RC app**: sync/offline, pre-flight checklist, fly/monitor, auto-resume, sorties, as-flown logs | Planned |
 | 4 | **Pilot 2 injection** workflow | Planned |
 | 5 | **Field validation**: waypoint cap, simulator run, short live block | Planned |
