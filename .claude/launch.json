@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-planner",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "@3dm/web"],
+      "port": 5178
+    }
+  ]
+}

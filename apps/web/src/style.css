@@ -1,0 +1,110 @@
+:root {
+  --bg: #0b0f14;
+  --panel: #111821;
+  --panel-2: #16202b;
+  --line: #243242;
+  --text: #dbe4ee;
+  --muted: #8295a8;
+  --accent: #3fa9f5;
+  --c-line: #3ddc97;
+  --c-run: #aab4c0;
+  --c-fig8: #ffb020;
+  --c-appr: #ff5d5d;
+  --c-aoi: #3fa9f5;
+  --c-err: #ff4d6d;
+  --c-warn: #ffb020;
+  --c-info: #6fb6ff;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --sans: 'Barlow Semi Condensed', system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.4 var(--sans); }
+#app {
+  height: 100vh; display: grid;
+  grid-template: "head head" 48px "side main" 1fr / 340px 1fr;
+}
+header {
+  grid-area: head; display: flex; align-items: center; gap: 20px; padding: 0 16px;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 600; font-size: 18px; letter-spacing: .02em; white-space: nowrap; }
+.brand .mark { font-family: var(--mono); background: var(--accent); color: #041018; padding: 1px 6px; border-radius: 3px; margin-right: 4px; }
+.brand .sub { color: var(--muted); font-weight: 400; font-size: 14px; margin-left: 6px; }
+.blockname { flex: 1; font-family: var(--mono); font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.head-actions { display: flex; gap: 8px; }
+
+aside { grid-area: side; overflow-y: auto; background: var(--panel); border-right: 1px solid var(--line); }
+aside section { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+h2 { margin: 0 0 10px; font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+button {
+  font: 500 14px var(--sans); color: #041018; background: var(--accent); border: 0; border-radius: 4px;
+  padding: 7px 12px; cursor: pointer; white-space: nowrap;
+}
+button:disabled { opacity: .4; cursor: not-allowed; }
+button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+button.ghost:not(:disabled):hover { border-color: var(--accent); }
+button.link { background: none; color: var(--accent); padding: 6px 0; }
+
+input, select {
+  font: 14px var(--mono); color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 4px; padding: 6px 8px; width: 100%; min-width: 0;
+}
+input:focus, select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+.row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.row:first-of-type { margin-top: 0; }
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.fields label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); }
+.fields em { font-style: normal; font-family: var(--mono); font-size: 11px; opacity: .7; }
+.check { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; cursor: pointer; }
+.check input { width: auto; }
+.note { margin-top: 8px; font-size: 13px; color: var(--muted); }
+
+.drop {
+  display: flex; flex-direction: column; gap: 2px; padding: 14px; text-align: center; cursor: pointer;
+  border: 1px dashed var(--line); border-radius: 6px; background: var(--panel-2); font-size: 13px; color: var(--muted);
+}
+.drop strong { color: var(--text); font-size: 15px; }
+.drop.small { padding: 8px; margin-top: 8px; }
+.drop:hover, body.dragging .drop { border-color: var(--accent); }
+
+main { grid-area: main; display: grid; grid-template-rows: 1fr 280px; min-height: 0; position: relative; }
+#map { min-height: 0; }
+.legend {
+  position: absolute; top: 10px; left: 10px; display: flex; gap: 12px; padding: 6px 10px; font-size: 13px;
+  background: rgba(11, 15, 20, .82); border: 1px solid var(--line); border-radius: 4px;
+}
+.legend i, .profile-head i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+
+.bottom { display: grid; grid-template-columns: 250px 1fr 340px; min-height: 0; border-top: 1px solid var(--line); background: var(--panel); }
+.bottom > * { padding: 12px 14px; overflow-y: auto; min-height: 0; }
+.stats { border-right: 1px solid var(--line); }
+.stats div { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; font-size: 13px; border-bottom: 1px solid rgba(36, 50, 66, .5); }
+.stats span { color: var(--muted); }
+.stats b { font: 500 13px var(--mono); }
+.stats .foot { font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+.empty { color: var(--muted); }
+
+.profile-wrap { display: flex; flex-direction: column; overflow: hidden; }
+.profile-head { display: flex; align-items: center; gap: 12px; }
+.profile-head h2 { margin: 0; }
+.profile-head select { width: auto; padding: 3px 6px; }
+.profile-head .key { margin-left: auto; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+.profile-head .key i { margin-left: 10px; }
+.k-flight { background: var(--accent); } .k-floor { background: var(--c-warn); } .k-terr { background: #8a6a45; }
+#profile { flex: 1; width: 100%; min-height: 0; margin-top: 6px; }
+#profile .grid { stroke: var(--line); stroke-width: 1; }
+#profile .axis { fill: var(--muted); font: 11px var(--mono); }
+#profile .terrain { fill: #5a4630; stroke: #8a6a45; stroke-width: 1; opacity: .9; }
+#profile .agl-floor { fill: none; stroke: var(--c-warn); stroke-width: 1.2; stroke-dasharray: 4 3; }
+#profile .flight { fill: none; stroke: var(--accent); stroke-width: 2; }
+#profile .wp { fill: var(--bg); stroke: var(--accent); stroke-width: 1.5; }
+#profile .wp.runin, #profile .wp.runout { stroke: var(--c-run); }
+
+.issues { border-left: 1px solid var(--line); }
+.issue { display: grid; grid-template-columns: 44px 1fr; gap: 8px; padding: 6px 0; font-size: 13px; border-bottom: 1px solid rgba(36, 50, 66, .5); }
+.issue b { font: 600 10px var(--mono); text-transform: uppercase; padding-top: 3px; }
+.issue.error b { color: var(--c-err); } .issue.warn b { color: var(--c-warn); } .issue.info b { color: var(--c-info); } .issue.ok b { color: var(--c-line); }
+
+.maplibregl-ctrl-attrib { font-size: 11px; }

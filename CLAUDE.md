@@ -34,8 +34,16 @@ DEM clip (AOI + buffer), offline basemap tiles.
 - **Sorties**: split into battery-sized routes along the same path as resume, one-line overlap.
 - Regression test: synthetic Nimba block (`test/synthetic-nimba.js`): 23 lines, 902 WP, 137 km, ~135 min.
 
+## SDK facts (see docs/msdk-research.md for sources)
+- MSDK **5.18.0**; M400 since 5.15, L3 since 5.17. Kotlin 2.1, AGP 8.7, Gradle 8.12, JDK 17,
+  compile/target 35, minSdk 24, arm64-v8a. RC Plus 2 = Android 11.
+- L3 recording: `LidarKey.KeyPointCloudRecord` / `KeyPointCloudRecordStatus` exist; untested on L3.
+- WPML: M400 `droneEnumValue` = 103 (verified). waylines.wpml heights are WGS84 ellipsoidal;
+  template.kml heightMode EGM96. `recordPointCloud` action documented for M300/M350 only.
+- Pilot 2 file injection is unofficial; prefer flying from our app, or Import Route / Cloud API library.
+
 ## Blocked on (do NOT guess — wrong values = Pilot 2 rejects file or L3 doesn't record)
-1. M400 / L3 `droneEnumValue` / `payloadEnumValue` etc. for the WPML header.
+1. L3 `payloadEnumValue` etc. for the WPML header (M400 drone enum 103 is verified — still confirm from the sample).
 2. Exact WPML action XML for start/stop point-cloud recording.
 3. Pilot 2 / aircraft max waypoints per route.
 4. Height mode (WGS84 ellipsoidal vs other) → whether `geoidN` is applied.
