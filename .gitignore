@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.wrangler/
+.gradle/
+.idea/
+*.iml
+local.properties
+.dev.vars
+*.apk
+*.keystore
+*.jks
+test/preview.svg
