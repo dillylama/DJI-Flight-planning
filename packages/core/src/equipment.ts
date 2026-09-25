@@ -109,7 +109,7 @@ export function checkLimits(plan: Plan, flight: Route<FlightWp>, ctx: LimitConte
 
   if (ctx.totalMin > ctx.sortieMin) {
     const n = Math.ceil(ctx.totalMin / ctx.sortieMin);
-    issues.push({ severity: 'warn', code: 'SORTIES', message: `Estimated ${ctx.totalMin.toFixed(0)} min is more than one battery set (${ctx.sortieMin} min usable): about ${n} sorties. Sortie splitting is coming; until then use Resume to fly it in parts.` });
+    issues.push({ severity: 'warn', code: 'SORTIES', message: `Estimated ${ctx.totalMin.toFixed(0)} min is more than one battery set (${ctx.sortieMin} min usable): about ${n} sorties. See the sortie split.` });
   }
   return issues;
 }

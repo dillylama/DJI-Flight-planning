@@ -49,14 +49,17 @@ DEM clip (AOI + buffer), offline basemap tiles.
 - DJI documents NO figure-8 for L3 (it auto-calibrates inside Area Routes); ours is optional, default on.
 - Planner supports LiDAR (L3) and photogrammetry (P1 24/35/50, L3 RGB) modes.
 
-## Blocked on (do NOT guess — wrong values = Pilot 2 rejects file or L3 doesn't record)
-1. L3 `payloadEnumValue` etc. for the WPML header (M400 drone enum 103 is verified — still confirm from the sample).
-2. Exact WPML action XML for start/stop point-cloud recording.
-3. Pilot 2 / aircraft max waypoints per route.
-4. Height mode (WGS84 ellipsoidal vs other) → whether `geoidN` is applied.
-Source: KMZ exported from the RC — **Waypoint Route** (not Area Route), L3 selected, 4 WPs: start
-point-cloud recording on WP1, different speed at WP2, stop recording on WP4 → `samples/`.
-Luke will supply later; scaffold the WPML writer around it, don't invent values.
+## WPML (from Luke's Pilot 2 samples, 25 Sep 2026; details in docs/wpml.md)
+- Header VERIFIED: WPML 1.0.6, M400 droneEnumValue 103/0, L3 payloadEnumValue 117/0, payloadPositionIndex 0 (default port).
+- Heights: template.kml heightMode EGM96 (height + ellipsoidHeight); waylines.wpml executeHeightMode WGS84 (ellipsoidal).
+  egm96-universal reproduces Pilot 2's ellipsoidHeight to 0.1 mm.
+- Recording: recordPointCloud start/pause/resume/stopRecord; DJI IMU calibration = aircraftCalibration action
+  (3 passes, 30 m) before startRecord and after stopRecord; L3 RGB = startContinuousShooting on multipleDistance.
+- Pilot 2 forces first/last waypoint to toPointAndStopWithDiscontinuityCurvature, damping 0.
+- Only verified L3 values are written: samplingRate (Hz), returnMode sedecupleReturn, scanningMode repetitive.
+  Other return/scan modes need another sample. payloadSubEnumValue was 0 (waypoint) vs 1 (area): we write 0.
+- Samples + generated tests hold real site coordinates → gitignored (public repo) until Luke decides.
+- Still open: Pilot 2 import of our KMZ, waypoint cap (samples/generated/test-cap-*.kmz), actions in Pilot 2 waypoint UI.
 
 ## Phase plan
 0. MSDK spike (go/no-go): M400 connect + telemetry; L3 detect + record start/stop; tiny KMZ via
@@ -65,6 +68,15 @@ Luke will supply later; scaffold the WPML writer around it, don't invent values.
 2. web planner + api (projects, profiles, validation, publish, RC pairing via QR).
 3. RC app: sync/offline, pre-flight checklist, fly/monitor, auto-resume, sorties, as-flown logs.
 4. Pilot 2 injection path. 5. Field validation (WP cap, simulator, short live block).
+
+## Sync backend (apps/api)
+- Worker + D1 + R2, local only so far (dev on port 8788; 8787 is SurveyDeliver). Admin token in apps/api/.dev.vars.
+- Deploy needs Luke: Cloudflare account, D1/R2 create, ADMIN_TOKEN secret, domain, ALLOWED_ORIGINS, Access.
+- Planner dev prefill: apps/web/.env.development.local (VITE_OPENTOPO_KEY, VITE_API_URL, VITE_API_ADMIN_TOKEN).
+
+## Sorties (packages/core/src/sorties.ts)
+- Split at whole lines by usable minutes/battery set; each sortie = transit + climb + fig-8 + lines + RTH + descent,
+  timed with conservative vertical rates (4 up / 3 down m/s). Home placement dominates sortie count on high blocks.
 
 ## Conventions / constraints
 - RC Plus 2 browser file picker is broken — anything on the RC loads via our app, not the browser.

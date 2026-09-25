@@ -13,3 +13,8 @@ local.properties
 test/preview.svg
 *.local
 .env*
+
+# Pilot 2 exports + generated tests contain real site coordinates; kept local until Luke decides (public repo)
+samples/*.kmz
+samples/extracted/
+samples/generated/

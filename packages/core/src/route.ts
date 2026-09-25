@@ -26,13 +26,16 @@ export interface BuildOptions {
   fromLine?: number;       // line where data stopped; the route restarts one line earlier
   speedMs?: number;
   fig8?: boolean;          // IMU-excitation figure-8 before the first line (LiDAR); off for photogrammetry
+  startLine?: number;      // explicit first line (sorties); overrides fromLine, no line of overlap added
+  endLine?: number;        // last line flown, inclusive (sorties); default the last line
 }
 
-// Full job, or a resume from any line.
-export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true }: BuildOptions = {}): Route {
+// Full job, a resume from any line, or one sortie (a line range).
+export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true, startLine, endLine }: BuildOptions = {}): Route {
   const { o, d, c, lines } = plan;
   const v = speedMs || o.speedMs;
-  const startIdx = Math.max(0, fromLine - (fromLine > 0 ? 1 : 0));
+  const startIdx = startLine ?? Math.max(0, fromLine - (fromLine > 0 ? 1 : 0));
+  const lastIdx = Math.min(lines.length - 1, endLine ?? lines.length - 1);
   const toXY = (u: number, vv: number): XY => add(mul(d, u), mul(c, vv));
   const wps: Omit<RouteWp, 'dampingM' | 'turnMode'>[] = [];
   const push = (xy: XY, role: Role, extra: Partial<RouteWp> = {}) =>
@@ -62,7 +65,7 @@ export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true }: B
     loop(add(X, mul(right, r)), mul(right, -1));  // right lobe
   }
 
-  for (let i = startIdx; i < lines.length; i++) {
+  for (let i = startIdx; i <= lastIdx; i++) {
     const L = lines[i];
     const a = L.dir > 0 ? L.umin : L.umax, b = L.dir > 0 ? L.umax : L.umin;
     const s = L.dir;
