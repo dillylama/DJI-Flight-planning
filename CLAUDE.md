@@ -25,10 +25,16 @@ DEM clip (AOI + buffer), offline basemap tiles.
 - Lines from block polygon + AGL, speed, sidelap, course; spacing from L3 swath. Serpentine.
 - ~150 m run-in / run-out on every line.
 - Waypoints every ~150 m, **absolute heights** from the DEM (each waypoint ≥ max terrain along both
-  adjacent legs + 75 m corridor + AGL; gradient-limited by raising only).
+  adjacent legs + 75 m corridor sampled every ≤30 m across-track + AGL).
+- **Vertical profile** (docs/ugcs-notes.md): default `slow` = follow terrain and slow each steep leg so the
+  climb/descent rate sits at the limit (4 / 3 m/s, both ends of the leg capped because DJI ramps speed to the
+  next waypoint; legs needing <1 m/s = TOO_STEEP). `raise` = old gradient-limited waypoint raising.
+  DJI `waypointSpeed` = speed from that waypoint to the NEXT (verified) → `legSpeed(wps, i) = wps[i].speed`.
 - Fly-through: `toPointAndPassWithContinuityCurvature`, per-waypoint damping < adjacent leg length.
-- **Figure-8** (IMU excitation) before the first line and before any resumed segment. Point-cloud
-  recording must already be running during it (START_RECORD on the approach waypoint).
+- **Figure-8** (IMU excitation) before the first line, before any resumed segment, AND after the last line
+  (vendors + DJI L2/L3 manuals: align at both ends for forward/backward trajectory processing). Recording runs
+  from the approach waypoint (START_RECORD) through the end figure-8 to the exit waypoint (STOP_RECORD).
+  Straight level run ≥ alignStraightS (12 s) or 2.5 r before the first 8 and after the last.
 - **Resume**: line where data stopped + new speed → route starts one line earlier, fresh figure-8.
   Never rely on Pilot 2 breakpoints.
 - **Sorties**: split into battery-sized routes along the same path as resume, one-line overlap.

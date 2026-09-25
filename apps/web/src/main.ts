@@ -29,11 +29,11 @@ interface Result {
 // What the map/profile show: the whole job, or one sortie.
 interface View { plan: Plan; route: Route; flight: Route<FlightWp> | null; transit: Transit | null; cov: Coverage | null; issues: Issue[]; lastLine: number }
 type SensorKind = 'lidar' | 'photo';
-interface SurveyCfg { sensor: SensorKind; pulse: string; scan: string; fig8: boolean; camera: string; frontlap: number; shutterInv: number; sortieMin: number; sortieOverlap: number; maxWp: number | null; djiCal: boolean; rgbPhotos: boolean }
-const SURVEY_DEFAULTS: SurveyCfg = { sensor: 'lidar', pulse: '100', scan: 'linear', fig8: true, camera: 'p1-35', frontlap: 80, shutterInv: 1000, sortieMin: M400_LIMITS.sortieMinDefault, sortieOverlap: 0, maxWp: null, djiCal: true, rgbPhotos: true };
+interface SurveyCfg { sensor: SensorKind; pulse: string; scan: string; fig8: boolean; camera: string; frontlap: number; shutterInv: number; sortieMin: number; sortieOverlap: number; maxWp: number | null; djiCal: boolean; rgbPhotos: boolean; fig8End: boolean }
+const SURVEY_DEFAULTS: SurveyCfg = { sensor: 'lidar', pulse: '100', scan: 'linear', fig8: true, camera: 'p1-35', frontlap: 80, shutterInv: 1000, sortieMin: M400_LIMITS.sortieMinDefault, sortieOverlap: 0, maxWp: null, djiCal: true, rgbPhotos: true, fig8End: true };
 const LAYERS = [
   ['aoi', 'Block outline'], ['lines', 'Data lines'], ['turns', 'Run-in/out & turns'], ['fig8', 'Figure-8 & approach'],
-  ['wps', 'Waypoints'], ['rec', 'Record start/stop'], ['swath', 'Swath / photo footprint'], ['drops', 'Drop lines to terrain (3D)'],
+  ['wps', 'Waypoints'], ['rec', 'Record start/stop'], ['swath', 'Swath / photo footprint'], ['overlaps', 'Strip overlaps'], ['drops', 'Drop lines to terrain (3D)'],
   ['transit', 'Take-off transit'], ['rth', 'RTH path'],
 ] as const;
 type LayerId = typeof LAYERS[number][0];
@@ -75,7 +75,7 @@ const scan = () => L3_SCAN.find(s => s.id === state.survey.scan) ?? L3_SCAN[0];
 const isPhoto = () => state.survey.sensor === 'photo';
 
 // ── Layout ────────────────────────────────────────────────────────
-type Field<K> = { key: K; label: string; unit: string; step: number; min: number; max: number; only?: SensorKind };
+type Field<K> = { key: K; label: string; unit: string; step: number; min: number; max: number; only?: SensorKind; vmode?: 'slow' | 'raise' };
 const FIELDS: Field<keyof PlanOptions>[] = [
   { key: 'aglM', label: 'AGL', unit: 'm', step: 10, min: 20, max: 1000 },
   { key: 'speedMs', label: 'Line speed', unit: 'm/s', step: 0.5, min: 1, max: M400_LIMITS.lineSpeedMaxMs },
@@ -86,7 +86,9 @@ const FIELDS: Field<keyof PlanOptions>[] = [
   { key: 'runOutM', label: 'Run-out', unit: 'm', step: 10, min: 0, max: 1000 },
   { key: 'wpSpacingM', label: 'Max WP spacing', unit: 'm', step: 10, min: 20, max: 1000 },
   { key: 'corridorM', label: 'Terrain corridor ±', unit: 'm', step: 5, min: 0, max: 500 },
-  { key: 'maxGradient', label: 'Max climb/descent', unit: 'rise/run', step: 0.01, min: 0.01, max: 0.5 },
+  { key: 'climbMs', label: 'Max climb rate', unit: 'm/s', step: 0.5, min: 0.5, max: M400_LIMITS.climbMaxMs, vmode: 'slow' },
+  { key: 'descentMs', label: 'Max descent rate', unit: 'm/s', step: 0.5, min: 0.5, max: M400_LIMITS.descentMaxMs, vmode: 'slow' },
+  { key: 'maxGradient', label: 'Max gradient', unit: 'rise/run', step: 0.01, min: 0.01, max: 0.5, vmode: 'raise' },
   { key: 'fig8BankDeg', label: 'Figure-8 bank', unit: '°', step: 1, min: 5, max: M400_LIMITS.bankMaxDeg, only: 'lidar' },
 ];
 const TK_FIELDS: Field<'takeoffSecurityM' | 'transitSpeedMs' | 'minClearanceM'>[] = [
@@ -98,7 +100,7 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').repl
 const ti = (k: string) => TIPS[k] ? `<i class="ti" tabindex="0" data-tip="${esc(TIPS[k].t)}"${TIPS[k].rec ? ` data-rec="${esc(TIPS[k].rec!)}"` : ''}>i</i>` : '';
 const btnTip = (k: string) => TIPS[k] ? ` data-tip="${esc(TIPS[k].t)}"` : '';
 const fieldHtml = (f: Field<string>, group: string) =>
-  `<label${f.only ? ` data-only="${f.only}"` : ''}><span class="lt">${f.label} <em>${f.unit}</em>${ti(f.key)}</span><input type="number" data-group="${group}" data-key="${f.key}" step="${f.step}" min="${f.min}" max="${f.max}" /></label>`;
+  `<label${f.only ? ` data-only="${f.only}"` : ''}${f.vmode ? ` data-vmode="${f.vmode}"` : ''}><span class="lt">${f.label} <em>${f.unit}</em>${ti(f.key)}</span><input type="number" data-group="${group}" data-key="${f.key}" step="${f.step}" min="${f.min}" max="${f.max}" /></label>`;
 const opt = (v: string, label: string) => `<option value="${v}">${label}</option>`;
 
 const app = document.getElementById('app')!;
@@ -136,6 +138,7 @@ app.innerHTML = `
       <label><span class="lt">Pulse rate ${ti('lidarMode')}</span><select id="pulseSel">${L3_PULSE.map(p => opt(p.id, `${p.khz} kHz · AGL < ${p.maxAglM} m`)).join('')}</select></label>
       <label><span class="lt">Scan mode</span><select id="scanSel">${L3_SCAN.map(s => opt(s.id, `${s.name} ${s.fovH}°×${s.fovV}°`)).join('')}</select></label>
       <label class="check span2"><input type="checkbox" id="fig8On" /> IMU figure-8 before lines and resumes</label>
+      <label class="check span2"><input type="checkbox" id="fig8EndOn" /> IMU figure-8 at the end too ${ti('fig8End')}</label>
       <label class="check span2"><input type="checkbox" id="djiCalOn" /> DJI IMU calibration at start and end ${ti('djiCal')}</label>
       <label class="check span2"><input type="checkbox" id="rgbOn" /> L3 RGB photos on data lines ${ti('rgbPhotos')}</label>
     </div>
@@ -149,7 +152,10 @@ app.innerHTML = `
   </section>
   <section>
     <h2>Flight</h2>
-    <div class="fields" id="fields">${FIELDS.map(f => fieldHtml(f, 'plan')).join('')}</div>
+    <div class="fields" id="fields">${FIELDS.map(f => fieldHtml(f, 'plan')).join('')}
+      <label class="span2"><span class="lt">Vertical profile ${ti('verticalMode')}</span>
+        <select id="vmodeSel"><option value="slow">Follow terrain; slow down to the climb/descent limits</option><option value="raise">Keep line speed; raise waypoints (gradient limit)</option></select></label>
+    </div>
     <div class="row"><button id="optCourse" class="ghost" disabled${btnTip('optCourse')}>Optimise course</button><button id="resetParams" class="link">Reset defaults</button></div>
   </section>
   <section>
@@ -189,9 +195,11 @@ app.innerHTML = `
   <div id="map"></div>
   <div class="legend">
     <span><i style="background:var(--c-line)"></i>Data line</span><span><i style="background:var(--c-run)"></i>Run-in/out, turn</span>
-    <span><i style="background:var(--c-fig8)"></i>Figure-8</span><span><i style="background:var(--c-appr)"></i>Approach</span>
+    <span><i style="background:var(--c-fig8)"></i>Figure-8</span><span><i style="background:var(--c-appr)"></i>Approach / exit</span>
     <span><i style="background:var(--c-transit)"></i>Transit</span><span><i style="background:var(--c-rth)"></i>RTH</span>
-    <span><i style="background:var(--c-swath)"></i>Swath</span>
+    <span><i style="background:var(--c-swath)"></i>Swath</span><span><i style="background:var(--c-overlap)"></i>Strip overlap</span>
+    <span><i class="dot wp"></i>Waypoint (zoom in)</span><span><i class="dot" style="background:var(--c-line)"></i>Record start</span><span><i class="dot" style="background:var(--c-appr)"></i>Record stop</span>
+    <span><i class="dot flag"></i>Flagged WP (see Checks)</span>
   </div>
   <div class="map-toggles">
     <button id="view3d" class="ghost"${btnTip('view3d')}>3D</button>
@@ -248,6 +256,10 @@ function syncFields() {
   $<HTMLSelectElement>('pulseSel').value = s.pulse;
   $<HTMLSelectElement>('scanSel').value = s.scan;
   $<HTMLInputElement>('fig8On').checked = s.fig8;
+  $<HTMLInputElement>('fig8EndOn').checked = s.fig8End;
+  $<HTMLInputElement>('fig8EndOn').disabled = !s.fig8;
+  $<HTMLSelectElement>('vmodeSel').value = P('verticalMode');
+  document.querySelectorAll<HTMLElement>('aside [data-vmode]').forEach(el => { el.hidden = el.dataset.vmode !== P('verticalMode'); });
   $<HTMLInputElement>('djiCalOn').checked = s.djiCal;
   $<HTMLInputElement>('rgbOn').checked = s.rgbPhotos;
   $<HTMLSelectElement>('camSel').value = s.camera;
@@ -297,6 +309,8 @@ $('sensorSeg').addEventListener('click', e => {
 $('pulseSel').addEventListener('change', e => { state.survey.pulse = (e.target as HTMLSelectElement).value; change(); });
 $('scanSel').addEventListener('change', e => { state.survey.scan = (e.target as HTMLSelectElement).value; change(); });
 $('fig8On').addEventListener('change', e => { state.survey.fig8 = (e.target as HTMLInputElement).checked; change(); });
+$('fig8EndOn').addEventListener('change', e => { state.survey.fig8End = (e.target as HTMLInputElement).checked; change(); });
+$('vmodeSel').addEventListener('change', e => { state.params.verticalMode = (e.target as HTMLSelectElement).value as PlanOptions['verticalMode']; change(); });
 $('djiCalOn').addEventListener('change', e => { state.survey.djiCal = (e.target as HTMLInputElement).checked; change(); });
 $('rgbOn').addEventListener('change', e => { state.survey.rgbPhotos = (e.target as HTMLInputElement).checked; change(); });
 $('camSel').addEventListener('change', e => { state.survey.camera = (e.target as HTMLSelectElement).value; change(); });
@@ -356,15 +370,17 @@ map.addControl(deck);
 
 const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 const roleColor = () => ['match', ['get', 'role'],
-  'line', css('--c-line'), 'fig8', css('--c-fig8'), 'approach', css('--c-appr'), css('--c-run')] as unknown as string;
+  'line', css('--c-line'), 'fig8', css('--c-fig8'), 'approach', css('--c-appr'), 'exit', css('--c-appr'), css('--c-run')] as unknown as string;
 const visibleRoles = () => [
-  ...(state.layers.lines ? ['line'] : []), ...(state.layers.turns ? ['runin', 'runout'] : []), ...(state.layers.fig8 ? ['fig8', 'approach'] : []),
+  ...(state.layers.lines ? ['line'] : []), ...(state.layers.turns ? ['runin', 'runout'] : []), ...(state.layers.fig8 ? ['fig8', 'approach', 'exit'] : []),
 ];
 
 let mapReady = false;
 function onStyleReady() {   // style ready: add our layers without waiting for every tile
-  for (const id of ['aoi', 'route', 'wps', 'rec', 'swath', 'transit', 'rth']) map.addSource(id, { type: 'geojson', data: empty });
+  for (const id of ['aoi', 'route', 'wps', 'rec', 'swath', 'overlap', 'transit', 'rth']) map.addSource(id, { type: 'geojson', data: empty });
   map.addLayer({ id: 'swath-fill', type: 'fill', source: 'swath', paint: { 'fill-color': css('--c-swath'), 'fill-opacity': 0.14 } });
+  map.addLayer({ id: 'overlap-fill', type: 'fill', source: 'overlap', paint: { 'fill-color': css('--c-overlap'), 'fill-opacity': 0.38 } });
+  map.addLayer({ id: 'overlap-line', type: 'line', source: 'overlap', paint: { 'line-color': css('--c-overlap'), 'line-width': 1, 'line-opacity': 0.8 } });
   map.addLayer({ id: 'aoi-fill', type: 'fill', source: 'aoi', paint: { 'fill-color': css('--c-aoi'), 'fill-opacity': 0.06 } });
   map.addLayer({ id: 'aoi-line', type: 'line', source: 'aoi', paint: { 'line-color': css('--c-aoi'), 'line-width': 2 } });
   map.addLayer({ id: 'route-line', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' },
@@ -387,6 +403,9 @@ function onStyleReady() {   // style ready: add our layers without waiting for e
   const recPopup = new maplibregl.Popup({ closeButton: false, offset: 10 });
   map.on('mouseenter', 'rec', e => { const f = e.features?.[0]; if (f) recPopup.setLngLat((f.geometry as GeoJSON.Point).coordinates as [number, number]).setText(f.properties.label).addTo(map); });
   map.on('mouseleave', 'rec', () => recPopup.remove());
+  const ovPopup = new maplibregl.Popup({ closeButton: false, offset: 6 });
+  map.on('mousemove', 'overlap-fill', e => { const f = e.features?.[0]; if (f) ovPopup.setLngLat(e.lngLat).setText(f.properties.label).addTo(map); });
+  map.on('mouseleave', 'overlap-fill', () => ovPopup.remove());
   mapReady = true;
   applyView(false);
   if (state.aoi) fitAoi();
@@ -434,6 +453,8 @@ function applyView(animate = true) {
   map.setLayoutProperty('aoi-fill', 'visibility', vis(L.aoi));
   map.setLayoutProperty('aoi-line', 'visibility', vis(L.aoi));
   map.setLayoutProperty('swath-fill', 'visibility', vis(L.swath));
+  map.setLayoutProperty('overlap-fill', 'visibility', vis(L.overlaps));
+  map.setLayoutProperty('overlap-line', 'visibility', vis(L.overlaps));
   map.setLayoutProperty('route-line', 'visibility', vis(flat));
   map.setFilter('route-line', ['in', ['get', 'role'], ['literal', visibleRoles()]]);
   map.setFilter('route-hit', ['in', ['get', 'role'], ['literal', visibleRoles()]]);
@@ -461,6 +482,7 @@ function schedule() { clearTimeout(timer); timer = window.setTimeout(run, 60); }
 const planOpts = (): Partial<PlanOptions> => (isPhoto() ? { ...state.params, fovDeg: cameraFovDeg(camera()) } : state.params);
 const routeOpts = (fromLine?: number) => ({
   fig8: !isPhoto() && state.survey.fig8,
+  fig8End: !isPhoto() && state.survey.fig8 && state.survey.fig8End,
   ...(state.resume.on && fromLine != null ? { fromLine, speedMs: state.resume.speed } : {}),
 });
 
@@ -511,8 +533,9 @@ function compute(): Result | null {
   try {
     r.sp = planSorties(plan, state.dem.elev, state.home, state.takeoff, {
       usableMin: state.survey.sortieMin, firstLine: route.startIdx, speedMs: route.speedMs, fig8: !isPhoto() && state.survey.fig8,
+      fig8End: !isPhoto() && state.survey.fig8 && state.survey.fig8End,
       overlapLines: state.survey.sortieOverlap, maxWaypoints: state.survey.maxWp,
-      climbMs: M400_LIMITS.climbWarnMs, descentMs: M400_LIMITS.descentWarnMs, full: r.flight,
+      climbMs: P('climbMs'), descentMs: P('descentMs'), full: r.flight,
     });
     r.issues.push(...r.sp.issues);
     for (const so of r.sp.sorties) if (so.transit) {
@@ -612,7 +635,7 @@ function renderMap(r: View | null) {
   if (!mapReady) return;
   const aoi = state.aoi;
   src('aoi')!.setData(aoi ? { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[...aoi.poly, aoi.poly[0]]] } } : empty);
-  if (!r) { for (const id of ['route', 'wps', 'rec', 'swath', 'transit', 'rth']) src(id)!.setData(empty); return; }
+  if (!r) { for (const id of ['route', 'wps', 'rec', 'swath', 'overlap', 'transit', 'rth']) src(id)!.setData(empty); return; }
   const flagged = new Set(r.issues.filter(i => i.severity !== 'info').flatMap(i => i.wps ?? []));
   src('route')!.setData({ type: 'FeatureCollection', features: segments(r, false).map(c => ({
     type: 'Feature', properties: { role: c.role, line: c.line ?? '', sel: c.line === state.selLine }, geometry: { type: 'LineString', coordinates: c.coords } })) });
@@ -625,6 +648,10 @@ function renderMap(r: View | null) {
   src('swath')!.setData({ type: 'FeatureCollection', features: (r.cov?.swaths ?? []).map(s => ({
     type: 'Feature', properties: { line: s.line },
     geometry: { type: 'Polygon', coordinates: [[...s.left, ...[...s.right].reverse(), s.left[0]]] } })) });
+  src('overlap')!.setData({ type: 'FeatureCollection', features: (r.cov?.overlaps ?? []).map(o => ({
+    type: 'Feature',
+    properties: { label: `Lines ${o.lines[0] + 1}–${o.lines[1] + 1} overlap: ${fmt(o.widthMinM)}–${fmt(o.widthMaxM)} m (${fmt(o.pctMin)}–${fmt(o.pctMax)} % of the narrower strip)` },
+    geometry: { type: 'Polygon', coordinates: [[...o.poly, o.poly[0]]] } })) });
   src('transit')!.setData(lineFc(r.transit?.path));
   src('rth')!.setData(lineFc(r.transit?.rthFromLast));
 }
@@ -633,7 +660,7 @@ function renderMap(r: View | null) {
 function renderDeck(r: View | null) {
   if (!state.view3d || !r?.flight) { deck.setProps({ layers: [] }); return; }
   const col: Record<string, [number, number, number, number]> = {
-    line: rgba('--c-line'), fig8: rgba('--c-fig8'), approach: rgba('--c-appr'), runin: rgba('--c-run'), runout: rgba('--c-run'),
+    line: rgba('--c-line'), fig8: rgba('--c-fig8'), approach: rgba('--c-appr'), exit: rgba('--c-appr'), runin: rgba('--c-run'), runout: rgba('--c-run'),
   };
   const roles = new Set(visibleRoles());
   const segs = segments(r, true).filter(s => roles.has(s.role));
@@ -695,6 +722,8 @@ function renderStats(r: Result | null) {
     ['Route', `${fmt(st.routeKm, 1)} km (${fmt(st.dataKm, 1)} on lines)`],
     ['Height (orthometric)', `${fmt(st.hMin)}–${fmt(st.hMax)} m`],
     ['AGL on lines', `${fmt(st.aglOnLineMin)}–${fmt(st.aglOnLineMax)} m`, 'Height above the terrain directly under each line waypoint.'],
+    ['Line speed', st.lineSpeedMin === st.lineSpeedMax ? `${fmt(st.lineSpeedMax, 1)} m/s` : `${fmt(st.lineSpeedMin, 1)}–${fmt(st.lineSpeedMax, 1)} m/s`, 'Speed range on the data lines. Legs are slowed where the terrain climb or descent would exceed the rate limits.'],
+    ...(st.slowedLegs ? [['Slowed legs', `${st.slowedLegs} · ${fmt(st.slowedKm, 1)} km`, 'Legs (whole route) flown below line speed to hold the climb/descent limits. Point density rises on them (∝ 1/speed).'] as Row] : []),
   );
   if (t) rows.push(
     ['Take-off transit', `${fmt(t.distanceM / 1000, 1)} km · ${fmt(t.timeS / 60, 1)} min`],

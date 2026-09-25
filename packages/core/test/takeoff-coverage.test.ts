@@ -91,10 +91,11 @@ test('limits: pulse-rate AGL and climb-rate checks', () => {
   assert.ok(codes(350).includes('error:L3_AGL'));
   // The default 15 % gradient at 12 m/s is only 1.8 m/s vertical: no climb warning.
   const step = (lon: number) => { const x = (lon - lon0) / m * k; return x > 0 && x < 600 ? 1500 : 100; };   // ridge: climb then descent
-  const gentle = applyHeights(plan, buildRoute(plan, { speedMs: 12 }), step);
-  assert.ok(!checkLimits(plan, gentle, { sensor: 'photo', sortieMin: 30, totalMin: 10 }).some(i => i.code === 'CLIMB'));
+  const planRaise = planLines(poly, { aglM: 300, verticalMode: 'raise' });
+  const gentle = applyHeights(planRaise, buildRoute(planRaise, { speedMs: 12 }), step);
+  assert.ok(!checkLimits(planRaise, gentle, { sensor: 'photo', sortieMin: 30, totalMin: 10 }).some(i => i.code === 'CLIMB'));
   // A 50 % gradient at 12 m/s = 6 m/s+ vertical: over the conservative limits.
-  const plan50 = planLines(poly, { aglM: 300, maxGradient: 0.6 });
+  const plan50 = planLines(poly, { aglM: 300, maxGradient: 0.6, verticalMode: 'raise' });   // raise mode keeps speed, so the rate check fires
   const steep = applyHeights(plan50, buildRoute(plan50, { speedMs: 12 }), step);
   const c2 = checkLimits(plan50, steep, { sensor: 'photo', sortieMin: 30, totalMin: 10 }).map(i => i.severity + ':' + i.code);
   assert.ok(c2.includes('error:CLIMB') && c2.includes('error:DESCENT'), c2.join());

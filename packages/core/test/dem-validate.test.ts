@@ -39,6 +39,6 @@ test('validate flags high AGL, unknown WP cap, and nothing blocking on a flat bl
   assert.ok(codes.includes('WP_CAP_UNKNOWN'));
   assert.ok(validate(plan, flat, { maxWaypoints: 10 }).some(i => i.code === 'WP_CAP'));
 
-  const ridge = applyHeights(plan, buildRoute(plan), (lon) => ((lon - lon0) / m > 0 && (lon - lon0) / m < 60 ? 900 : 500));
+  const ridge = applyHeights(plan, buildRoute(plan), (lon) => ((lon - lon0) / m > 20 && (lon - lon0) / m < 60 ? 900 : 500));
   assert.ok(validate(plan, ridge).some(i => i.code === 'AGL_HIGH'));
 });

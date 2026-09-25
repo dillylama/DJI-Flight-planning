@@ -16,6 +16,7 @@
   --c-transit: #7fd4ff;
   --c-rth: #c77dff;
   --c-swath: #4fb3ff;
+  --c-overlap: #6fd08c;
   --c-err: #ff4d4d;
   --c-warn: #ffb020;
   --c-info: #7fb8ff;
@@ -108,6 +109,9 @@ main { grid-area: main; display: grid; grid-template-rows: 1fr 290px; min-height
   background: rgba(28, 28, 28, .85); border: 1px solid var(--line); border-radius: 4px; max-width: calc(100% - 230px);
 }
 .legend i, .profile-head i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.legend i.dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid #fff; }
+.legend i.dot.flag { background: var(--c-line); border-color: var(--c-err); }
+.legend i.dot.wp { width: 7px; height: 7px; background: var(--c-line); border: 1px solid #1c1c1c; }
 .map-toggles { position: absolute; top: 10px; right: 50px; display: flex; gap: 6px; align-items: flex-start; }
 .map-toggles > button { background: rgba(28, 28, 28, .88); }
 .layers-panel {

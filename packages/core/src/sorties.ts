@@ -1,7 +1,7 @@
 import { type LonLat, type XY, dist } from './geo.ts';
-import { applyHeights, type ElevFn, type FlightWp } from './heights.ts';
+import { applyHeights, routeTimeS, type ElevFn, type FlightWp } from './heights.ts';
 import type { Plan } from './plan.ts';
-import { buildRoute, type Route, type RouteWp } from './route.ts';
+import { buildRoute, legSpeed, type Route, type RouteWp } from './route.ts';
 import { planTransit, TAKEOFF_DEFAULTS, type TakeoffOptions, type Transit } from './takeoff.ts';
 import type { Issue } from './validate.ts';
 
@@ -13,6 +13,7 @@ export interface SortieOptions {
   firstLine?: number;             // first line of the job (e.g. a resume start); default 0
   speedMs?: number;
   fig8?: boolean;
+  fig8End?: boolean;
   overlapLines?: number;          // lines re-flown at the start of each following sortie; default 0
   maxWaypoints?: number | null;   // Pilot 2 / aircraft cap per route, if known
   climbMs?: number;               // vertical rates used for the time estimate (use conservative limits)
@@ -40,7 +41,7 @@ function sortieTime(
   wps: (RouteWp & { h?: number })[], speed: number, homeXY: XY | null, homeElev: number | null,
   hTop: number, tk: TakeoffOptions, climbMs: number, descentMs: number,
 ): SortieTime {
-  const route = routeLen(wps) / speed / 60;
+  const route = routeTimeS(wps) / 60;      // per-leg speeds (slowed climbs count); `speed` only names the line speed
   if (!homeXY || homeElev == null) return { total: route, route, transit: 0, rth: 0, vertical: 0 };
   const transit = dist(homeXY, wps[0].xy) / tk.transitSpeedMs / 60;
   const rth = dist(wps[wps.length - 1].xy, homeXY) / tk.transitSpeedMs / 60;
@@ -59,10 +60,19 @@ export function planSorties(
   const issues: Issue[] = [];
 
   // Heights of the whole job once: used to estimate the climb for any candidate range.
-  const full = opts.full ?? applyHeights(plan, buildRoute(plan, { startLine: first, speedMs: speed, fig8 }), elev);
+  const full = opts.full ?? applyHeights(plan, buildRoute(plan, { startLine: first, speedMs: speed, fig8, fig8End: opts.fig8End }), elev);
   const topOfLine = new Map<number, number>();
   for (const w of full.wps) if (w.line != null) topOfLine.set(w.line, Math.max(topOfLine.get(w.line) ?? -Infinity, w.h));
   const hTopRange = (s: number, e: number) => { let m = -Infinity; for (let i = s; i <= e; i++) m = Math.max(m, topOfLine.get(i) ?? -Infinity); return m; };
+  // Slow-down factor per line from the full route (time at leg speeds ÷ time at line speed), so the
+  // cheap estimates below account for legs slowed on steep ground without re-sampling the DEM.
+  const slowT = new Map<number, number>(), fastT = new Map<number, number>();
+  for (let i = 1; i < full.wps.length; i++) {
+    const li = full.wps[i].line; if (li == null) continue;
+    const d = dist(full.wps[i].xy, full.wps[i - 1].xy);
+    slowT.set(li, (slowT.get(li) ?? 0) + d / legSpeed(full.wps, i - 1)); fastT.set(li, (fastT.get(li) ?? 0) + d / speed);
+  }
+  const factor = (li: number | undefined) => (li != null && fastT.get(li) ? slowT.get(li)! / fastT.get(li)! : 1);
 
   const homeXY = home ? plan.proj.fwd(home[0], home[1]) : null;
   const homeElev = home ? elev(home[0], home[1]) : null;
@@ -70,7 +80,8 @@ export function planSorties(
   if (!home) issues.push({ severity: 'info', code: 'SORTIE_NO_HOME', message: 'Sorties are timed without take-off transit and RTH because home is not set.' });
 
   const estimate = (s: number, e: number) => {
-    const r = buildRoute(plan, { startLine: s, endLine: e, speedMs: speed, fig8 });
+    const r = buildRoute(plan, { startLine: s, endLine: e, speedMs: speed, fig8, fig8End: opts.fig8End });
+    for (let i = 0; i < r.wps.length - 1; i++) r.wps[i].speed = speed / factor(r.wps[i + 1].line);
     return { r, t: sortieTime(r.wps, speed, homeXY, homeElev, hTopRange(s, e), tk, climbMs, descentMs) };
   };
   const fits = (s: number, e: number) => {
@@ -95,7 +106,7 @@ export function planSorties(
 
   // Build each sortie exactly: its own heights, transit/RTH check and time.
   const sorties: Sortie[] = ranges.map(([a, b], index) => {
-    const route = applyHeights(plan, buildRoute(plan, { startLine: a, endLine: b, speedMs: speed, fig8 }), elev);
+    const route = applyHeights(plan, buildRoute(plan, { startLine: a, endLine: b, speedMs: speed, fig8, fig8End: opts.fig8End }), elev);
     const transit = home ? planTransit(plan, route, elev, home, tk) : null;
     const hTop = Math.max(...route.wps.map(w => w.h));
     const time = sortieTime(route.wps, speed, homeXY, homeElev, hTop, tk, climbMs, descentMs);

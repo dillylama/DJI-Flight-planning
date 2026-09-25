@@ -1,7 +1,7 @@
 import { D2R, dist } from './geo.ts';
 import type { FlightWp } from './heights.ts';
 import type { Plan } from './plan.ts';
-import type { Route } from './route.ts';
+import { legSpeed, type Route } from './route.ts';
 import type { Camera } from './sensor.ts';
 import { lensFovDeg } from './sensor.ts';
 import type { Issue } from './validate.ts';
@@ -77,11 +77,12 @@ export function checkLimits(plan: Plan, flight: Route<FlightWp>, ctx: LimitConte
   for (let i = 1; i < wps.length; i++) {
     const d = dist(wps[i].xy, wps[i - 1].xy);
     if (d < 1) continue;
-    const vz = (wps[i].h - wps[i - 1].h) / d * wps[i].speed;
+    const vz = (wps[i].h - wps[i - 1].h) / d * legSpeed(wps, i - 1);
     if (vz > worstUp) { worstUp = vz; upAt = i; }
     if (-vz > worstDown) { worstDown = -vz; downAt = i; }
   }
   const vert = (what: string, val: number, warn: number, max: number, spec: number, at: number) => {
+    val = +val.toFixed(6);                        // slow mode puts legs exactly on the limit; don't flag rounding noise
     if (val > max) issues.push({ severity: 'error', code: what.toUpperCase(), message: `${what} rate ${val.toFixed(1)} m/s at WP ${at + 1} exceeds the conservative limit ${max} m/s (M400 max ${spec} m/s). Lower the max climb/descent gradient or the speed.`, wps: [at] });
     else if (val > warn) issues.push({ severity: 'warn', code: what.toUpperCase(), message: `${what} rate reaches ${val.toFixed(1)} m/s at WP ${at + 1} (conservative limit ${warn} m/s, M400 max ${spec} m/s).`, wps: [at] });
   };
