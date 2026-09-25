@@ -6,11 +6,12 @@ import { PathLayer, LineLayer } from '@deck.gl/layers';
 import {
   DEFAULTS, TAKEOFF_DEFAULTS, M400_LIMITS, M400_SPEC, L3_PULSE, L3_SCAN, CAMERAS,
   planLines, buildRoute, applyHeights, stats, validate, readGeoTiff, rasterElev, rasterBbox,
-  bufferedBbox, openTopoUrl, planTransit, coverage, checkLimits, planSorties,
+  bufferedBbox, openTopoUrl, planTransit, coverage, checkLimits, planSorties, writeWpml, writeKmz,
   cameraFovDeg, gsdCm, aglForGsd, photoPlan, frontlapAtInterval, lidarDensity,
   type PlanOptions, type Plan, type Route, type FlightWp, type RouteStats, type Issue, type ElevFn, type Bbox,
   type LonLat, type TakeoffOptions, type Transit, type Coverage, type Pt3, type Camera, type PhotoPlan, type SortiePlan,
 } from '@3dm/core';
+import JSZip from 'jszip';
 import { aoiFromFile, type Aoi } from './aoi.ts';
 import { demoPoly, demoElev } from './demo.ts';
 import { renderProfile, type ProfilePt } from './profile.ts';
@@ -28,8 +29,8 @@ interface Result {
 // What the map/profile show: the whole job, or one sortie.
 interface View { plan: Plan; route: Route; flight: Route<FlightWp> | null; transit: Transit | null; cov: Coverage | null; issues: Issue[]; lastLine: number }
 type SensorKind = 'lidar' | 'photo';
-interface SurveyCfg { sensor: SensorKind; pulse: string; scan: string; fig8: boolean; camera: string; frontlap: number; shutterInv: number; sortieMin: number; sortieOverlap: number; maxWp: number | null }
-const SURVEY_DEFAULTS: SurveyCfg = { sensor: 'lidar', pulse: '100', scan: 'linear', fig8: true, camera: 'p1-35', frontlap: 80, shutterInv: 1000, sortieMin: M400_LIMITS.sortieMinDefault, sortieOverlap: 0, maxWp: null };
+interface SurveyCfg { sensor: SensorKind; pulse: string; scan: string; fig8: boolean; camera: string; frontlap: number; shutterInv: number; sortieMin: number; sortieOverlap: number; maxWp: number | null; djiCal: boolean; rgbPhotos: boolean }
+const SURVEY_DEFAULTS: SurveyCfg = { sensor: 'lidar', pulse: '100', scan: 'linear', fig8: true, camera: 'p1-35', frontlap: 80, shutterInv: 1000, sortieMin: M400_LIMITS.sortieMinDefault, sortieOverlap: 0, maxWp: null, djiCal: true, rgbPhotos: true };
 const LAYERS = [
   ['aoi', 'Block outline'], ['lines', 'Data lines'], ['turns', 'Run-in/out & turns'], ['fig8', 'Figure-8 & approach'],
   ['wps', 'Waypoints'], ['rec', 'Record start/stop'], ['swath', 'Swath / photo footprint'], ['drops', 'Drop lines to terrain (3D)'],
@@ -107,7 +108,7 @@ app.innerHTML = `
   <div class="blockname" id="blockName">No block loaded</div>
   <div class="head-actions">
     <button id="exportJson" class="ghost" disabled${btnTip('exportJson')}>Export mission.json</button>
-    <button id="exportKmz" class="ghost" disabled data-tip="Waits for the RC Waypoint Route sample export (samples/README.md). We don't guess the WPML header.">Export KMZ</button>
+    <button id="exportKmz" class="ghost" disabled>Export KMZ</button>
   </div>
 </header>
 <aside>
@@ -135,6 +136,8 @@ app.innerHTML = `
       <label><span class="lt">Pulse rate ${ti('lidarMode')}</span><select id="pulseSel">${L3_PULSE.map(p => opt(p.id, `${p.khz} kHz · AGL < ${p.maxAglM} m`)).join('')}</select></label>
       <label><span class="lt">Scan mode</span><select id="scanSel">${L3_SCAN.map(s => opt(s.id, `${s.name} ${s.fovH}°×${s.fovV}°`)).join('')}</select></label>
       <label class="check span2"><input type="checkbox" id="fig8On" /> IMU figure-8 before lines and resumes</label>
+      <label class="check span2"><input type="checkbox" id="djiCalOn" /> DJI IMU calibration at start and end ${ti('djiCal')}</label>
+      <label class="check span2"><input type="checkbox" id="rgbOn" /> L3 RGB photos on data lines ${ti('rgbPhotos')}</label>
     </div>
     <div class="fields" data-only="photo">
       <label class="span2"><span class="lt">Camera ${ti('camera')}</span><select id="camSel">${CAMERAS.map(c => opt(c.id, c.name)).join('')}</select></label>
@@ -245,6 +248,8 @@ function syncFields() {
   $<HTMLSelectElement>('pulseSel').value = s.pulse;
   $<HTMLSelectElement>('scanSel').value = s.scan;
   $<HTMLInputElement>('fig8On').checked = s.fig8;
+  $<HTMLInputElement>('djiCalOn').checked = s.djiCal;
+  $<HTMLInputElement>('rgbOn').checked = s.rgbPhotos;
   $<HTMLSelectElement>('camSel').value = s.camera;
   $<HTMLInputElement>('frontlapIn').value = String(s.frontlap);
   $<HTMLInputElement>('shutterIn').value = String(s.shutterInv);
@@ -292,6 +297,8 @@ $('sensorSeg').addEventListener('click', e => {
 $('pulseSel').addEventListener('change', e => { state.survey.pulse = (e.target as HTMLSelectElement).value; change(); });
 $('scanSel').addEventListener('change', e => { state.survey.scan = (e.target as HTMLSelectElement).value; change(); });
 $('fig8On').addEventListener('change', e => { state.survey.fig8 = (e.target as HTMLInputElement).checked; change(); });
+$('djiCalOn').addEventListener('change', e => { state.survey.djiCal = (e.target as HTMLInputElement).checked; change(); });
+$('rgbOn').addEventListener('change', e => { state.survey.rgbPhotos = (e.target as HTMLInputElement).checked; change(); });
 $('camSel').addEventListener('change', e => { state.survey.camera = (e.target as HTMLSelectElement).value; change(); });
 $('gsdIn').addEventListener('input', e => {
   const g = Number((e.target as HTMLInputElement).value);
@@ -562,6 +569,10 @@ function run() {
   const r = (state.result = compute());
   $<HTMLButtonElement>('exportJson').disabled = !r?.flight || r.issues.some(i => i.severity === 'error');
   $<HTMLButtonElement>('publishBtn').disabled = $<HTMLButtonElement>('exportJson').disabled;
+  const kmzBlock = kmzBlocker();
+  const kb = $<HTMLButtonElement>('exportKmz');
+  kb.disabled = $<HTMLButtonElement>('exportJson').disabled || !!kmzBlock;
+  kb.dataset.tip = kmzBlock ?? 'Download DJI KMZ (template.kml + waylines.wpml) built from your Pilot 2 samples: the selected sortie, or every sortie as a ZIP. Import into Pilot 2 or push from 3DM Fly.';
   $<HTMLButtonElement>('optCourse').disabled = !state.aoi;
   $<HTMLButtonElement>('fetchDem').disabled = !state.aoi;
   $('blockName').textContent = state.aoi ? state.aoi.name : 'No block loaded';
@@ -894,6 +905,49 @@ $('exportJson').onclick = () => {
   a.download = `${state.aoi.name.replace(/[^\w.-]+/g, '_')}${state.resume.on ? `_resume_L${state.resume.fromLine}` : ''}.mission.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
+// ── KMZ export (DJI WPML, from the Pilot 2 samples) ─────────────
+function kmzBlocker(): string | null {
+  if (isPhoto()) return 'KMZ export for photogrammetry needs a P1 (or L3 RGB-only) Pilot 2 sample first.';
+  if (state.survey.scan !== 'linear') return 'Only the Linear (repetitive) scan mode is verified from your samples so far.';
+  return null;
+}
+function rgbSpacingM(aglM: number): number {
+  const c = CAMERAS.find(c => c.id === 'l3-100')!;
+  return 2 * aglM * Math.tan((c.vfovDeg / 2) * Math.PI / 180) * (1 - 0.75);   // 75 % frontlap, as Pilot 2's L3 default
+}
+function kmzFor(route: Route<FlightWp>) {
+  return writeWpml(route, {
+    takeoff: { ...TAKEOFF_DEFAULTS, ...state.takeoff },
+    lidar: { samplingRate: pulse().khz * 1000, returnMode: 'sedecupleReturn', scanningMode: 'repetitive', modelColoring: state.survey.rgbPhotos },
+    djiImuCalibration: state.survey.djiCal,
+    rgbPhotoSpacingM: state.survey.rgbPhotos ? +rgbSpacingM(state.result!.plan.o.aglM).toFixed(2) : null,
+    gimbalStartGroup: true,
+  });
+}
+const safeName = (s: string) => s.replace(/[^\w.-]+/g, '_');
+function download(name: string, data: Uint8Array | Blob, type = 'application/octet-stream') {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(data instanceof Blob ? data : new Blob([data as BlobPart], { type }));
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+$('exportKmz').onclick = async () => {
+  const r = state.result;
+  if (!r?.flight || !state.aoi || kmzBlocker()) return;
+  const base = safeName(state.aoi.name);
+  const sorties = r.sp?.sorties ?? [];
+  if (state.selSortie !== 'all' && sorties[state.selSortie]) {
+    const so = sorties[state.selSortie];
+    download(`${base}_S${String(so.index + 1).padStart(2, '0')}_L${so.fromLine + 1}-${so.toLine + 1}.kmz`, await writeKmz(kmzFor(so.route)));
+  } else if (sorties.length > 1) {
+    const zip = new JSZip();
+    for (const so of sorties) zip.file(`${base}_S${String(so.index + 1).padStart(2, '0')}_L${so.fromLine + 1}-${so.toLine + 1}.kmz`, await writeKmz(kmzFor(so.route)));
+    download(`${base}_${sorties.length}-sorties.zip`, await zip.generateAsync({ type: 'blob' }));
+  } else {
+    download(`${base}.kmz`, await writeKmz(kmzFor(r.flight)));
+  }
 };
 
 // ── Sync to RC ───────────────────────────────────────────────────

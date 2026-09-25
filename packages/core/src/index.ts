@@ -10,3 +10,4 @@ export * from './coverage.ts';
 export * from './sensor.ts';
 export * from './equipment.ts';
 export * from './sorties.ts';
+export * from './wpml.ts';

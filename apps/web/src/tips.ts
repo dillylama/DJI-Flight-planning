@@ -29,6 +29,8 @@ export const TIPS: Record<string, Tip> = {
   maxWp: { t: 'Waypoint cap per route for Pilot 2 / the aircraft. Not published by DJI; we will measure it with a large-route import test on the RC. Sorties are also cut to stay under it.', rec: 'Leave empty until the RC test gives the real number.' },
   sync: { t: 'Publishes the plan (all sorties, waypoints, settings) plus the terrain to the sync server. Paired RCs download it while they have internet and then fly offline. Versions are immutable: publishing again creates v2, v3, …' },
   apiToken: { t: 'Office admin token for the sync server. Stored only in this browser. In production the office side should also sit behind Cloudflare Access.' },
+  djiCal: { t: 'DJI "aircraftCalibration" action, copied from your Pilot 2 L3 area route: 3 back-and-forth passes over 30 m before recording starts and after it stops. It is DJI\'s own IMU calibration for the L3 and works alongside our figure-8.', rec: 'On (DJI does this for every L3 area route).' },
+  rgbPhotos: { t: 'L3 mapping cameras shoot continuously on every data line (gimbal locked at −90°) for point-cloud colourisation, the same actions Pilot 2 writes for L3 area routes. Spacing = 25 % of the photo footprint (75 % frontlap).', rec: 'On unless you only need geometry.' },
   otKey: { t: 'Free API key from opentopography.org (log in → My Account → Request API key). Stored only in this browser.' },
   resOn: { t: 'Build a route that picks up a job after data stopped (battery, weather, a recording fault). It never relies on Pilot 2 breakpoints.' },
   resLine: { t: 'The line where good data stopped. The new route restarts ONE LINE EARLIER for overlap, with a fresh figure-8 and recording started on the approach.' },
