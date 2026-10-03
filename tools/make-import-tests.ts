@@ -93,7 +93,9 @@ ${rows.join('\n')}
 1. Copy the .kmz files to the RC (USB → File transfer) → Pilot 2 → Flight Route → **Import route** (KMZ).
 2. \`test-01\`: does it import (note any message)? Does it draw on the right place? Open the route and note:
    - the height Pilot 2 shows for waypoint 1 and for the highest waypoint, and whether it says ASL / EGM96 / ALT;
-   - the speed it shows, and whether the legs between waypoints are drawn straight;
+   - the speed it shows, and whether the legs between waypoints are drawn straight. The route's global speed is
+     deliberately the SLOWEST waypoint speed and the global height the HIGHEST waypoint (safe fallbacks), so the
+     route summary may look slow and high: what counts is the speed and height on each waypoint;
    - the actions on waypoint 1 (gimbal, IMU calibration, start point cloud recording) and on the last waypoint.
 3. **Save test-01 in Pilot 2 without changing anything, then export it** (Flight Route → select → export KMZ) and copy that
    file back to the PC as \`samples/pilot2-reexport-test-01.kmz\`. Comparing what Pilot 2 writes with what we wrote is the
