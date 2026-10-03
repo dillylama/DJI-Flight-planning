@@ -31,7 +31,13 @@ Working now:
 - **LiDAR overlap**: planned vs achieved sidelap using each waypoint's real AGL, swath range, and swath
   footprints on the map (darker where strips overlap).
 - **Tooltips** on every option explaining what it does and the physics behind it.
-- Export `mission.json` (includes home and take-off settings). KMZ export waits for the RC sample.
+- **Export**: DJI KMZ per sortie and `mission.json` (which carries each KMZ with its SHA-256). Every route file
+  is built, read back and checked against the DEM by the independent verifier first; only files that passed
+  can be downloaded or published, never from the demo terrain, and only with a home point set. The RTH height
+  and Max Altitude (which the file cannot carry) are in the file name and confirmed in a dialog at export.
+- **Terrain clearance budget** in the stats: AGL − path rounding and lag − your uncertainty allowance.
+- **DEM datum**: say whether a dropped GeoTIFF is above mean sea level or ellipsoidal.
+- Number boxes only change the plan while their value is inside its allowed range.
 - A demo block (synthetic Nimba ridge) to try it without files.
 - **Sensor modes**: LiDAR (L3 pulse rate + scan mode, density estimate, L3 RGB GSD/frontlap, optional
   figure-8) or photogrammetry (P1 24/35/50 mm, L3 RGB; target GSD ↔ AGL, frontlap, exposure, blur,
@@ -45,4 +51,4 @@ Working now:
 In dev, the OpenTopography key can be put in `apps/web/.env.development.local` as `VITE_OPENTOPO_KEY=` (gitignored,
 not included in production builds).
 
-Next: sortie split, IndexedDB project store and DEM cache, publish to `apps/api`.
+See [docs/safety.md](../../docs/safety.md) for what is checked and what is not.
