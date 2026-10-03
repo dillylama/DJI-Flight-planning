@@ -12,12 +12,29 @@ export interface Projection {
   inv(x: number, y: number): LonLat;
 }
 
-// Local tangent plane about (lat0, lon0) — fine for blocks up to a few tens of km.
-export function makeProj(lat0: number, lon0: number): Projection {
-  const k = Math.cos(lat0 * D2R);
+// Metres per degree of longitude and latitude on the WGS84 ellipsoid at a latitude.
+const WGS84_E2 = 6.69437999014e-3;
+export function metresPerDeg(latDeg: number): [east: number, north: number] {
+  const s = Math.sin(latDeg * D2R), w = Math.sqrt(1 - WGS84_E2 * s * s);
+  return [(R_EARTH / w) * Math.cos(latDeg * D2R) * D2R, ((R_EARTH * (1 - WGS84_E2)) / (w * w * w)) * D2R];
+}
+
+// Local tangent plane about (lat0, lon0) with true metres on the WGS84 ellipsoid: distances are right to
+// about 0.1 % over blocks of a few tens of km. 'sphere' is the plane of the original JS engine (north–south
+// distances 0.4 % long at mid latitudes), kept only so the port can be compared with it point for point.
+export type ProjModel = 'wgs84' | 'sphere';
+export function makeProj(lat0: number, lon0: number, model: ProjModel = 'wgs84'): Projection {
+  if (model === 'sphere') {
+    const k = Math.cos(lat0 * D2R);
+    return {
+      fwd: (lon, lat) => [(lon - lon0) * D2R * R_EARTH * k, (lat - lat0) * D2R * R_EARTH],
+      inv: (x, y) => [lon0 + x / (R_EARTH * k) / D2R, lat0 + y / R_EARTH / D2R],
+    };
+  }
+  const [kx, ky] = metresPerDeg(lat0);
   return {
-    fwd: (lon, lat) => [(lon - lon0) * D2R * R_EARTH * k, (lat - lat0) * D2R * R_EARTH],
-    inv: (x, y) => [lon0 + x / (R_EARTH * k) / D2R, lat0 + y / R_EARTH / D2R],
+    fwd: (lon, lat) => [(lon - lon0) * kx, (lat - lat0) * ky],
+    inv: (x, y) => [lon0 + x / kx, lat0 + y / ky],
   };
 }
 

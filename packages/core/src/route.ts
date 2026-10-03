@@ -47,8 +47,11 @@ export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true, fig
   const push = (xy: XY, role: Role, extra: Partial<RouteWp> = {}) =>
     wps.push({ xy, role, speed: v, actions: [], ...extra });
 
+  // Run-in / run-out are never shorter than 20 m: a zero-length one would put two waypoints on the same spot.
+  const runIn = Math.max(20, o.runInM), runOut = Math.max(20, o.runOutM);
+
   // Figure-8 about crossover X, entered along hdg: left lobe then right lobe, back at X each time.
-  const r = o.fig8RadiusM || (v * v) / (G * Math.tan(o.fig8BankDeg * D2R));
+  const r = o.fig8RadiusM || Math.max(o.fig8MinRadiusM, (v * v) / (G * Math.tan(o.fig8BankDeg * D2R)));
   const straight = Math.max(2.5 * r, o.alignStraightS * v);   // straight run before/after the 8 (Phoenix: ≥10 s at ≥5 m/s)
   const eight = (X: XY, hdg: XY) => {
     const right: XY = [hdg[1], -hdg[0]];
@@ -67,7 +70,7 @@ export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true, fig
   // Start: approach (recording on) → figure-8 one radius behind the run-in start → lines.
   const first = lines[startIdx];
   const hdg0 = mul(d, first.dir);
-  const runInStart = toXY(first.dir > 0 ? first.umin - o.runInM : first.umax + o.runInM, first.v);
+  const runInStart = toXY(first.dir > 0 ? first.umin - runIn : first.umax + runIn, first.v);
   const X0 = add(runInStart, mul(hdg0, -r));
   push(add(X0, mul(hdg0, -straight)), 'approach', { actions: ['START_RECORD'] });   // recording running before the 8
   if (fig8) eight(X0, hdg0);
@@ -76,10 +79,12 @@ export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true, fig
     const L = lines[i];
     const a = L.dir > 0 ? L.umin : L.umax, b = L.dir > 0 ? L.umax : L.umin;
     const s = L.dir;
-    push(toXY(a - s * o.runInM, L.v), 'runin', { line: i });
-    const nSeg = Math.max(1, Math.ceil(Math.abs(b - a) / o.wpSpacingM));
-    for (let k = 0; k <= nSeg; k++) push(toXY(a + ((b - a) * k) / nSeg, L.v), 'line', { line: i });
-    push(toXY(b + s * o.runOutM, L.v), 'runout', { line: i });
+    push(toXY(a - s * runIn, L.v), 'runin', { line: i });
+    // A very short line (the block only clips this strip) gets one waypoint, never two almost on the same
+    // spot; the run-out beyond `b` still carries the aircraft across the whole strip.
+    const nSeg = Math.abs(b - a) < 20 ? 0 : Math.max(1, Math.ceil(Math.abs(b - a) / o.wpSpacingM));
+    for (let k = 0; k <= nSeg; k++) push(toXY(nSeg ? a + ((b - a) * k) / nSeg : a, L.v), 'line', { line: i });
+    push(toXY(b + s * runOut, L.v), 'runout', { line: i });
   }
 
   // End: figure-8 one radius beyond the run-out end, then an exit point where recording stops, so the

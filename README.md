@@ -6,8 +6,9 @@ A UgCS-style mission system for **DJI Matrice 400 + Zenmuse L3** LiDAR survey, b
 **Plan properly in the office → sync the mission to the RC → fly offline in the field**, either from
 our own RC app (*3DM Fly*, DJI Mobile SDK v5) or by injecting the route into DJI Pilot 2.
 
-> Status: **early development.** The route engine is done and tested. Web planner, sync and the
-> RC app are being built. See [Roadmap](#roadmap).
+> Status: **in development, not yet flown.** Planner, sync backend and KMZ writer work and are tested;
+> nothing has been confirmed on the aircraft yet. Read the [safety case](docs/safety.md) and follow the
+> test gates before flying anything this produces. See [Roadmap](#roadmap).
 
 ---
 
@@ -22,10 +23,14 @@ IMU-calibration figure-8, and breakpoint resume that can't be trusted. This syst
   the L3 swath, and lines alternate direction.
 - **~150 m run-in / run-out** on every line.
 - **Absolute heights from a good DEM** (Copernicus GLO-30 or the client's DTM). Each waypoint is at
-  least AGL above the highest terrain (with a 75 m corridor) along both adjacent legs, and
-  climb/descent is gradient-limited by raising waypoints, never lowering them.
-- **Fly-through turns** (`toPointAndPassWithContinuityCurvature`) with damping always shorter than
-  the adjacent legs.
+  least AGL above the highest DEM cell touching a 75 m corridor along both adjacent legs. Steep legs
+  are flown slower so climb and descent stay within conservative limits (or, optionally, waypoints
+  are raised to a gradient limit).
+- **Straight legs with fly-through turns** (`toPointAndPassWithContinuityCurvature`,
+  `useStraightLine 1`), damping always shorter than the adjacent legs and bounded so the rounded
+  path stays close to the legs.
+- **An independent check of every exported file**: the KMZ is read back and checked against the
+  terrain by separate code before it can leave the planner ([docs/safety.md](docs/safety.md)).
 - **Figure-8 IMU excitation** before the first line and before every resumed segment, with
   point-cloud recording already running.
 - **Resume** from any line at a new speed: the route restarts one line earlier with a fresh
@@ -54,7 +59,7 @@ IMU-calibration figure-8, and breakpoint resume that can't be trusted. This syst
 | [`index.html`](index.html) | **Legacy** single-file KMZ patcher (still live on GitHub Pages) | Maintenance only |
 | [`route-engine.js`](route-engine.js) | **Legacy** JS engine; the reference for the TypeScript parity test | Retire once core is complete |
 
-More detail: [docs/architecture.md](docs/architecture.md) · SDK research: [docs/msdk-research.md](docs/msdk-research.md) · Dev setup: [docs/dev-setup.md](docs/dev-setup.md)
+More detail: [docs/architecture.md](docs/architecture.md) · Safety case: [docs/safety.md](docs/safety.md) · WPML: [docs/wpml.md](docs/wpml.md) · SDK research: [docs/msdk-research.md](docs/msdk-research.md) · Dev setup: [docs/dev-setup.md](docs/dev-setup.md)
 
 ## Roadmap
 
@@ -86,6 +91,10 @@ about 135 min. Resume from line 9 at 14 m/s: starts on line 8, 595 WP, about 106
 
 ## Safety
 
-This software generates flight routes for large UAS, often flown BVLOS. Every route must be reviewed
-by the remote pilot before flight, including terrain clearance, RTH height, airspace and battery.
-Validate new versions in the DJI simulator before flying them.
+This software generates flight routes for large UAS, often flown BVLOS, with absolute heights: nothing
+on the aircraft looks at the ground during a waypoint route. [docs/safety.md](docs/safety.md) states
+what the planner guarantees, what it assumes and what it cannot know (obstacles that are not in the
+DEM, DEM error, the aircraft's own height without RTK, and how the aircraft flies the file). Every
+route must be reviewed by the remote pilot before flight, including terrain clearance, RTH height,
+Max Altitude, airspace and battery. New versions go through the gates in that document (Pilot 2
+import, simulator, a small flat flight) before a real job.

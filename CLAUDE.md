@@ -24,13 +24,22 @@ DEM clip (AOI + buffer), offline basemap tiles.
 ## Route engine behaviour (carry over into core)
 - Lines from block polygon + AGL, speed, sidelap, course; spacing from L3 swath. Serpentine.
 - ~150 m run-in / run-out on every line.
-- Waypoints every ~150 m, **absolute heights** from the DEM (each waypoint ≥ max terrain along both
-  adjacent legs + 75 m corridor sampled every ≤30 m across-track + AGL).
-- **Vertical profile** (docs/ugcs-notes.md): default `slow` = follow terrain and slow each steep leg so the
-  climb/descent rate sits at the limit (4 / 3 m/s, both ends of the leg capped because DJI ramps speed to the
-  next waypoint; legs needing <1 m/s = TOO_STEEP). `raise` = old gradient-limited waypoint raising.
-  DJI `waypointSpeed` = speed from that waypoint to the NEXT (verified) → `legSpeed(wps, i) = wps[i].speed`.
-- Fly-through: `toPointAndPassWithContinuityCurvature`, per-waypoint damping < adjacent leg length.
+- Waypoints every ~150 m, **absolute heights** from the DEM: each waypoint ≥ the highest DEM cell touching the
+  corridor of both adjacent legs (±75 m, extended beyond the leg ends, sampled finer than the DEM with the
+  highest of the 4 cells around each sample) + AGL. A DEM gap anywhere is an error (`TerrainGapError`).
+- **Vertical profile** (docs/ugcs-notes.md): default `slow` = follow terrain and slow steep legs so the
+  climb/descent rate stays within 4 / 3 m/s. A waypoint's speed is capped by its own leg, the leg before and the
+  entry speed of the leg after (braking 2 m/s²); legs needing <1 m/s = TOO_STEEP. `raise` = gradient-limited
+  waypoint raising. DJI `waypointSpeed` = speed from that waypoint to the NEXT → `legSpeed(wps, i) = wps[i].speed`.
+- Fly-through: `toPointAndPassWithContinuityCurvature` with **`useStraightLine 1`**; damping < adjacent leg
+  length, shortened so rounding stays ≤ 5 m vertically and inside the corridor sideways.
+- **Safety (docs/safety.md — read it before touching heights, terrain, takeoff, wpml or the export path):**
+  `safety.ts` = floors (AGL ≥ 50 m, corridor ≥ 30 m) + clearance budget (AGL − rounding − pull-up lag −
+  uncertainty; export refused < 30 m). `verify.ts` = independent check of the exported XML against the DEM; it may
+  import ONLY types from the rest of core (a test enforces this). The web app exports only the exact files that
+  passed, per sortie, never on demo terrain, and `run()` leaves no result when compute throws.
+  After changing planner maths or its tests run `npm run mutation` (breaks the planner 18 ways; every one
+  must be caught by the suite).
 - **Figure-8** (IMU excitation) before the first line, before any resumed segment, AND after the last line
   (vendors + DJI L2/L3 manuals: align at both ends for forward/backward trajectory processing). Recording runs
   from the approach waypoint (START_RECORD) through the end figure-8 to the exit waypoint (STOP_RECORD).
@@ -38,7 +47,10 @@ DEM clip (AOI + buffer), offline basemap tiles.
 - **Resume**: line where data stopped + new speed → route starts one line earlier, fresh figure-8.
   Never rely on Pilot 2 breakpoints.
 - **Sorties**: split into battery-sized routes along the same path as resume, one-line overlap.
-- Regression test: synthetic Nimba block (`test/synthetic-nimba.js`): 23 lines, 902 WP, 137 km, ~135 min.
+- Regression test: synthetic Nimba block: 23 lines, 902 WP, 137 km. `nimba.test.ts` compares the port with the
+  legacy engine on the legacy's spherical plane (`planLines(…, 'sphere')`); production uses WGS84 radii.
+- Tools: `node tools/make-import-tests.ts` (RC import tests → samples/generated, each verified),
+  `node tools/compare-kmz.ts ours.kmz pilot2.kmz --dem dem.tif` (what did Pilot 2 change on re-export?).
 
 ## SDK facts (see docs/msdk-research.md for sources)
 - MSDK **5.18.0**; M400 since 5.15, L3 since 5.17. Kotlin 2.1, AGP 8.7, Gradle 8.12, JDK 17,
@@ -65,7 +77,10 @@ DEM clip (AOI + buffer), offline basemap tiles.
 - Only verified L3 values are written: samplingRate (Hz), returnMode sedecupleReturn, scanningMode repetitive.
   Other return/scan modes need another sample. payloadSubEnumValue was 0 (waypoint) vs 1 (area): we write 0.
 - Samples + generated tests hold real site coordinates → gitignored (public repo) until Luke decides.
-- Still open: Pilot 2 import of our KMZ, waypoint cap (samples/generated/test-cap-*.kmz), actions in Pilot 2 waypoint UI.
+- Still open: Pilot 2 import + re-export diff of our KMZ, speeds > 15 m/s, waypoint cap
+  (samples/generated/test-cap-*.kmz), actions in Pilot 2 waypoint UI, fly-through rounding with useStraightLine 1.
+- The route file carries neither RTH height nor Max Altitude: the planner shows both per sortie, tags the file
+  name (`_RTH330_ALT430`) and makes the pilot confirm them at export.
 
 ## Phase plan
 0. MSDK spike (go/no-go): M400 connect + telemetry; L3 detect + record start/stop; tiny KMZ via
@@ -95,7 +110,8 @@ DEM clip (AOI + buffer), offline basemap tiles.
 - UI fonts: IBM Plex Mono + Barlow Semi Condensed.
 - Operator is experienced (BVLOS-rated, LiDAR specialist): explain physics precisely, flag
   corrections clearly, don't oversimplify.
-- Local tooling: Node 24, git, gh. No Android SDK / JDK 17 yet (only Java 8) — needed for apps/rc.
+- Local tooling: Node 24, git, gh, Android Studio + JDK 17 (apps/rc).
+- The project lives in `C:\Claude\M400`. Generated import tests: `samples\generated\` (gitignored).
 
 ## Progress tracker
 - docs/progress.html is the project timeline/gates page, published as an artifact (URL in memory). Update it and

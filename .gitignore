@@ -19,3 +19,4 @@ samples/*.kmz
 samples/extracted/
 samples/generated/
 deploy/planner/dist/
+samples/*.tif

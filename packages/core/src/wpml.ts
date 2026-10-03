@@ -4,12 +4,13 @@ import { dist } from './geo.ts';
 import type { FlightWp } from './heights.ts';
 import { legSpeed, type Route } from './route.ts';
 import { TAKEOFF_DEFAULTS, type TakeoffOptions } from './takeoff.ts';
+import { fileDamping } from './validate.ts';
 
 // DJI WPML writer for the M400 + Zenmuse L3. Every element and value below is copied from real Pilot 2
 // exports (samples/m400-l3-waypoint-reference.kmz and samples/m400-l3-area-reference.kmz, WPML 1.0.6).
 // Heights: template.kml carries EGM96 orthometric `height` + `ellipsoidHeight`; waylines.wpml executes in
 // WGS84 ellipsoidal heights. Pilot 2 uses the EGM96 grid that egm96-universal implements (matches to 0.1 mm).
-// Our DEM (GLO-30) is EGM2008: treating it as EGM96 costs < ~1–2 m, negligible against AGL and clearance.
+// Our DEM (GLO-30) is EGM2008: treating it as EGM96 costs < ~1–2 m, covered by the uncertainty allowance.
 
 export const WPML_NS = 'http://www.dji.com/wpmz/1.0.6';
 export const M400 = { droneEnumValue: 103, droneSubEnumValue: 0 } as const;
@@ -29,12 +30,18 @@ export interface WpmlOptions {
   djiImuCalibration?: boolean;         // DJI aircraftCalibration before startRecord and after stopRecord (as Pilot 2 does)
   rgbPhotoSpacingM?: number | null;    // L3 RGB continuous shooting on data lines at this distance; null = off
   gimbalStartGroup?: boolean;          // DJI start group: gimbal −90°, focus calibration, focus ∞ (as Pilot 2 does for L3)
+  // true (default): useStraightLine 1 = straight legs, rounded over the turn damping distance at each waypoint.
+  // This is what the legs' terrain clearance is computed for. false = useStraightLine 0 (fully curved path),
+  // only kept to reproduce the Pilot 2 sample file.
+  straightLegs?: boolean;
   createTime?: number;
 }
 
 export interface WpmlFiles { templateKml: string; waylinesWpml: string; distanceM: number; durationS: number }
 
 const f = (v: number, d = 6) => String(+v.toFixed(d));
+// Speeds and damping are rounded DOWN, so rounding can never push a climb rate or a damping sum over its limit.
+const fDown = (v: number, d = 2) => String(Math.floor(v * 10 ** d + 1e-9) / 10 ** d);
 const coord = (w: FlightWp) => `${w.lon},${w.lat}`;   // full double precision, as Pilot 2 writes
 
 interface Action { func: string; params: [string, string | number][] }
@@ -56,32 +63,49 @@ function actionXml(a: Action, id: number, ind: string): string {
   return `${ind}<wpml:action>\n${ind}  <wpml:actionId>${id}</wpml:actionId>\n${ind}  <wpml:actionActuatorFunc>${a.func}</wpml:actionActuatorFunc>\n${params}${ind}</wpml:action>`;
 }
 
-// Action groups per waypoint index, with globally increasing actionGroupId (as Pilot 2 writes them).
-function buildGroups(route: Route<FlightWp>, o: Required<Pick<WpmlOptions, 'payloadPositionIndex' | 'djiImuCalibration'>> & { rgb: number | null }): Map<number, Group[]> {
-  const wps = route.wps, pos = o.payloadPositionIndex;
-  const at = new Map<number, Group[]>();
-  const add = (i: number, g: Group) => { if (!at.has(i)) at.set(i, []); at.get(i)!.push(g); };
-  wps.forEach((w, i) => {
-    if (w.actions.includes('START_RECORD')) add(i, { start: i, end: i, trigger: 'reachPoint',
-      actions: [...(o.djiImuCalibration ? [calibration(0)] : []), record('startRecord', pos)] });
-  });
+// Action groups per waypoint index. Waypoint-arrival actions on one waypoint are merged into a single
+// reachPoint group in DJI's own order (Pilot 2 writes one such group per waypoint).
+function buildGroups(route: Route<FlightWp>, o: { pos: number; djiImuCalibration: boolean; rgb: number | null; gimbalDown: boolean }): Map<number, Group[]> {
+  const wps = route.wps, pos = o.pos;
+  const span = new Map<number, Group[]>();     // waypoint → groups that run along the following legs
+  const rgbStop = new Set<number>();           // waypoints where a line's continuous shooting ends
+  const onSpan = (i: number, g: Group) => { if (!span.has(i)) span.set(i, []); span.get(i)!.push(g); };
+
   if (o.rgb) {
-    // Each data line: lock gimbal and shoot every `rgb` metres from its first to its last line waypoint.
+    // Each data line: lock the gimbal and shoot every `rgb` metres from the first line waypoint to the
+    // RUN-OUT waypoint, and stop there. The stop is an arrival action; keeping it off the data line means
+    // that if the aircraft slows for it, it does so outside the block.
     const lines = new Map<number, number[]>();
     wps.forEach((w, i) => { if (w.role === 'line' && w.line != null) { if (!lines.has(w.line)) lines.set(w.line, []); lines.get(w.line)!.push(i); } });
     for (const idx of lines.values()) {
-      const a = idx[0], b = idx[idx.length - 1];
-      add(a, { start: a, end: b, trigger: 'betweenAdjacentPoints', actions: [{ func: 'gimbalAngleLock', params: [pp(pos)] }] });
-      add(a, { start: a, end: b, trigger: 'multipleDistance', triggerParam: o.rgb,
+      const a = idx[0], last = idx[idx.length - 1];
+      const b = last + 1 < wps.length && wps[last + 1].role === 'runout' ? last + 1 : last;
+      if (b === a) continue;
+      onSpan(a, { start: a, end: b, trigger: 'betweenAdjacentPoints', actions: [{ func: 'gimbalAngleLock', params: [pp(pos)] }] });
+      onSpan(a, { start: a, end: b, trigger: 'multipleDistance', triggerParam: o.rgb,
         actions: [gimbalRotate(pos), { func: 'startContinuousShooting', params: [pp(pos), ['useGlobalPayloadLensIndex', 0]] }] });
-      add(b, { start: b, end: b, trigger: 'reachPoint',
-        actions: [{ func: 'stopContinuousShooting', params: [pp(pos)] }, { func: 'gimbalAngleUnlock', params: [] }] });
+      rgbStop.add(b);
     }
   }
-  wps.forEach((w, i) => {
-    if (w.actions.includes('STOP_RECORD')) add(i, { start: i, end: i, trigger: 'reachPoint',
-      actions: [record('stopRecord', pos), ...(o.djiImuCalibration ? [calibration(1)] : [])] });
-  });
+
+  const at = new Map<number, Group[]>();
+  for (let i = 0; i < wps.length; i++) {
+    const start = wps[i].actions.includes('START_RECORD'), stop = wps[i].actions.includes('STOP_RECORD'), shot = rgbStop.has(i);
+    // Arrival actions in Pilot 2's order: (gimbal down, calibrate, start) … (stop record, stop shooting, calibrate, unlock).
+    const reach: Action[] = [
+      ...(start && o.gimbalDown ? [gimbalRotate(pos)] : []),
+      ...(start && o.djiImuCalibration ? [calibration(0)] : []),
+      ...(start ? [record('startRecord', pos)] : []),
+      ...(stop ? [record('stopRecord', pos)] : []),
+      ...(shot ? [{ func: 'stopContinuousShooting', params: [pp(pos)] } as Action] : []),
+      ...(stop && o.djiImuCalibration ? [calibration(1)] : []),
+      ...(shot ? [{ func: 'gimbalAngleUnlock', params: [] } as Action] : []),
+    ];
+    const g: Group[] = [];
+    if (reach.length) g.push({ start: i, end: i, trigger: 'reachPoint', actions: reach });
+    if (span.has(i)) g.push(...span.get(i)!);
+    if (g.length) at.set(i, g);
+  }
   return at;
 }
 
@@ -103,7 +127,7 @@ const missionConfig = (tk: TakeoffOptions, pos: number) => `    <wpml:missionCon
       <wpml:exitOnRCLost>executeLostAction</wpml:exitOnRCLost>
       <wpml:executeRCLostAction>goBack</wpml:executeRCLostAction>
       <wpml:takeOffSecurityHeight>${f(tk.takeoffSecurityM, 2)}</wpml:takeOffSecurityHeight>
-      <wpml:globalTransitionalSpeed>${f(tk.transitSpeedMs, 2)}</wpml:globalTransitionalSpeed>
+      <wpml:globalTransitionalSpeed>${fDown(tk.transitSpeedMs)}</wpml:globalTransitionalSpeed>
       <wpml:droneInfo>
         <wpml:droneEnumValue>${M400.droneEnumValue}</wpml:droneEnumValue>
         <wpml:droneSubEnumValue>${M400.droneSubEnumValue}</wpml:droneSubEnumValue>
@@ -128,12 +152,13 @@ ${ind}</wpml:waypointHeadingParam>
 // Pilot 2 writes the first and last waypoint as "stop" turns with zero damping.
 const turnOf = (wps: FlightWp[], i: number) => (i === 0 || i === wps.length - 1)
   ? { mode: 'toPointAndStopWithDiscontinuityCurvature', damp: 0 }
-  : { mode: wps[i].turnMode, damp: wps[i].dampingM };
+  : { mode: wps[i].turnMode, damp: fileDamping(wps, i) };
 
 export function writeWpml(route: Route<FlightWp>, opts: WpmlOptions = {}): WpmlFiles {
   const tk = { ...TAKEOFF_DEFAULTS, ...opts.takeoff };
   const pos = opts.payloadPositionIndex ?? 0;
   const lidar = opts.lidar ?? null;
+  const straight = (opts.straightLegs ?? true) ? 1 : 0;
   if (lidar) {
     if (!L3_WPML.samplingRates.includes(lidar.samplingRate)) throw new Error(`L3 sampling rate ${lidar.samplingRate} not verified`);
     if (!L3_WPML.returnModes.includes(lidar.returnMode)) throw new Error(`L3 return mode ${lidar.returnMode} not verified`);
@@ -141,16 +166,26 @@ export function writeWpml(route: Route<FlightWp>, opts: WpmlOptions = {}): WpmlF
   }
   const wps = route.wps;
   if (wps.length < 2) throw new Error('A route needs at least 2 waypoints');
+  for (const [i, w] of wps.entries()) {
+    if (![w.lon, w.lat, w.h, w.speed, w.dampingM].every(Number.isFinite)) throw new Error(`Waypoint ${i + 1} has a non-numeric value; nothing was written.`);
+    if (!(w.speed > 0)) throw new Error(`Waypoint ${i + 1} has speed ${w.speed}; nothing was written.`);
+  }
   const ell = wps.map(w => egm96ToEllipsoid(w.lat, w.lon, w.h));
+  if (!ell.every(Number.isFinite)) throw new Error('Geoid conversion failed; nothing was written.');
   let distanceM = 0, durationS = 0;
   for (let i = 1; i < wps.length; i++) {
     const d = Math.hypot(dist(wps[i].xy, wps[i - 1].xy), wps[i].h - wps[i - 1].h);
     distanceM += d; durationS += d / legSpeed(wps, i - 1);
   }
-  const groups = buildGroups(route, { payloadPositionIndex: pos, djiImuCalibration: opts.djiImuCalibration ?? false, rgb: opts.rgbPhotoSpacingM ?? null });
+  const groups = buildGroups(route, { pos, djiImuCalibration: opts.djiImuCalibration ?? false, rgb: opts.rgbPhotoSpacingM ?? null, gimbalDown: !!opts.gimbalStartGroup });
   const now = opts.createTime ?? Date.now();
+  // If a reader ever fell back to the global height, the whole route would be flown at the HIGHEST planned
+  // height, which clears every leg.
+  const globalHeight = Math.max(...wps.map(w => w.h));
+  // Same idea for speed: the global speed is the SLOWEST waypoint speed, which suits the steepest leg.
+  const globalSpeed = Math.min(...wps.map(w => w.speed));
 
-  // ── template.kml
+  // ── template.kml (what Pilot 2 reads; it regenerates waylines.wpml from this)
   const tId = { v: 0 };
   const tPlacemarks = wps.map((w, i) => {
     const t = turnOf(wps, i);
@@ -163,16 +198,16 @@ export function writeWpml(route: Route<FlightWp>, opts: WpmlOptions = {}): WpmlF
         <wpml:index>${i}</wpml:index>
         <wpml:ellipsoidHeight>${f(ell[i])}</wpml:ellipsoidHeight>
         <wpml:height>${f(w.h)}</wpml:height>
-        <wpml:waypointSpeed>${f(w.speed, 2)}</wpml:waypointSpeed>
-        <wpml:waypointTurnParam>
-          <wpml:waypointTurnMode>${t.mode}</wpml:waypointTurnMode>
-          <wpml:waypointTurnDampingDist>${f(t.damp, 2)}</wpml:waypointTurnDampingDist>
-        </wpml:waypointTurnParam>
         <wpml:useGlobalHeight>0</wpml:useGlobalHeight>
         <wpml:useGlobalSpeed>0</wpml:useGlobalSpeed>
+        <wpml:waypointSpeed>${fDown(w.speed)}</wpml:waypointSpeed>
         <wpml:useGlobalHeadingParam>1</wpml:useGlobalHeadingParam>
         <wpml:useGlobalTurnParam>0</wpml:useGlobalTurnParam>
-        <wpml:useStraightLine>0</wpml:useStraightLine>
+        <wpml:waypointTurnParam>
+          <wpml:waypointTurnMode>${t.mode}</wpml:waypointTurnMode>
+          <wpml:waypointTurnDampingDist>${fDown(t.damp)}</wpml:waypointTurnDampingDist>
+        </wpml:waypointTurnParam>
+        <wpml:useStraightLine>${straight}</wpml:useStraightLine>
 ${groupsXml(groups.get(i), tId, '        ')}        <wpml:isRisky>0</wpml:isRisky>
       </Placemark>`;
   }).join('\n');
@@ -197,8 +232,8 @@ ${missionConfig(tk, pos)}    <Folder>
         <wpml:heightMode>EGM96</wpml:heightMode>
         <wpml:positioningType>GPS</wpml:positioningType>
       </wpml:waylineCoordinateSysParam>
-      <wpml:autoFlightSpeed>${f(route.speedMs, 2)}</wpml:autoFlightSpeed>
-      <wpml:globalHeight>${f(wps[0].h)}</wpml:globalHeight>
+      <wpml:autoFlightSpeed>${fDown(globalSpeed)}</wpml:autoFlightSpeed>
+      <wpml:globalHeight>${f(globalHeight)}</wpml:globalHeight>
       <wpml:caliFlightEnable>0</wpml:caliFlightEnable>
       <wpml:gimbalPitchMode>manual</wpml:gimbalPitchMode>
       <wpml:globalWaypointHeadingParam>
@@ -208,7 +243,7 @@ ${missionConfig(tk, pos)}    <Folder>
         <wpml:waypointHeadingPoiIndex>0</wpml:waypointHeadingPoiIndex>
       </wpml:globalWaypointHeadingParam>
       <wpml:globalWaypointTurnMode>toPointAndPassWithContinuityCurvature</wpml:globalWaypointTurnMode>
-      <wpml:globalUseStraightLine>0</wpml:globalUseStraightLine>
+      <wpml:globalUseStraightLine>${straight}</wpml:globalUseStraightLine>
 ${tPlacemarks}
 ${payloadParam}
     </Folder>
@@ -216,7 +251,7 @@ ${payloadParam}
 </kml>
 `;
 
-  // ── waylines.wpml
+  // ── waylines.wpml (what the aircraft executes when the KMZ is pushed directly)
   const wId = { v: 0 };
   const startGroup = opts.gimbalStartGroup ? `      <wpml:startActionGroup>
 ${[gimbalRotate(pos), hover(1),
@@ -238,12 +273,12 @@ ${[gimbalRotate(pos), hover(1),
         </Point>
         <wpml:index>${i}</wpml:index>
         <wpml:executeHeight>${f(ell[i])}</wpml:executeHeight>
-        <wpml:waypointSpeed>${f(w.speed, 2)}</wpml:waypointSpeed>
+        <wpml:waypointSpeed>${fDown(w.speed)}</wpml:waypointSpeed>
 ${headingXml('        ', true)}        <wpml:waypointTurnParam>
           <wpml:waypointTurnMode>${t.mode}</wpml:waypointTurnMode>
-          <wpml:waypointTurnDampingDist>${f(t.damp, 2)}</wpml:waypointTurnDampingDist>
+          <wpml:waypointTurnDampingDist>${fDown(t.damp)}</wpml:waypointTurnDampingDist>
         </wpml:waypointTurnParam>
-        <wpml:useStraightLine>0</wpml:useStraightLine>
+        <wpml:useStraightLine>${straight}</wpml:useStraightLine>
 ${groupsXml(groups.get(i), wId, '        ')}        <wpml:waypointGimbalHeadingParam>
           <wpml:waypointGimbalPitchAngle>0</wpml:waypointGimbalPitchAngle>
           <wpml:waypointGimbalYawAngle>0</wpml:waypointGimbalYawAngle>
@@ -261,7 +296,7 @@ ${missionConfig(tk, pos)}    <Folder>
       <wpml:waylineId>0</wpml:waylineId>
       <wpml:distance>${f(distanceM)}</wpml:distance>
       <wpml:duration>${f(durationS)}</wpml:duration>
-      <wpml:autoFlightSpeed>${f(route.speedMs, 2)}</wpml:autoFlightSpeed>
+      <wpml:autoFlightSpeed>${fDown(globalSpeed)}</wpml:autoFlightSpeed>
 ${startGroup}      <wpml:realTimeFollowSurfaceByFov>0</wpml:realTimeFollowSurfaceByFov>
 ${wPlacemarks}
     </Folder>

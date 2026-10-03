@@ -174,3 +174,20 @@ main { grid-area: main; display: grid; grid-template-rows: 1fr 290px; min-height
 .pair-code { margin-top: 10px; padding: 10px; background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; display: flex; flex-direction: column; gap: 4px; }
 .pair-code b { font: 600 26px var(--mono); letter-spacing: .12em; color: #fff; text-align: center; }
 .pair-code span { font-size: 12px; color: var(--muted); }
+
+/* a value outside its allowed range: not used for the plan */
+input.bad, input.bad:focus { border-color: var(--c-err); outline: 1px solid var(--c-err); }
+
+/* what must be set on the RC, confirmed before any route leaves the planner */
+dialog#preflight { width: min(680px, calc(100vw - 32px)); padding: 20px 22px; color: var(--text); background: var(--panel, #262626); border: 1px solid var(--line); border-top: 3px solid var(--accent); border-radius: 6px; }
+dialog#preflight::backdrop { background: rgba(0, 0, 0, .62); }
+dialog#preflight h2 { font-size: 13px; }
+dialog#preflight p { margin: 0 0 10px; font-size: 14px; }
+dialog#preflight table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13px; }
+dialog#preflight th, dialog#preflight td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--line); }
+dialog#preflight th { font: 600 11px var(--mono); text-transform: uppercase; color: var(--muted); }
+dialog#preflight td:not(:first-child) { font: 600 14px var(--mono); color: var(--accent); white-space: nowrap; }
+dialog#preflight ul { margin: 0 0 14px; padding-left: 18px; font-size: 13px; line-height: 1.45; max-height: 38vh; overflow: auto; }
+dialog#preflight li { margin-bottom: 6px; }
+dialog#preflight .check { margin-bottom: 14px; font-size: 14px; }
+dialog#preflight .row { justify-content: flex-end; }
