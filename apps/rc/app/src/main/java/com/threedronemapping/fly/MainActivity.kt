@@ -49,6 +49,7 @@ import dji.v5.manager.aircraft.waypoint3.WaypointActionListener
 import dji.v5.manager.aircraft.waypoint3.WaypointMissionExecuteStateListener
 import dji.v5.manager.aircraft.waypoint3.WaypointMissionManager
 import dji.v5.manager.aircraft.waypoint3.model.WaylineExecutingInfo
+import dji.v5.manager.aircraft.waypoint3.model.BreakPointInfo
 import java.io.File
 import java.util.Locale
 
@@ -107,6 +108,7 @@ class MainActivity : Activity() {
     private var fdRtkAlt: Double? = null
     private var fdWp = -1
     private var lastTakeoffAlt: Double? = null
+    private var breakPoint: BreakPointInfo? = null
     private var fdState = "-"
     private var fdRec = "-"
     private val fdPoll = object : Runnable {
@@ -382,6 +384,7 @@ class MainActivity : Activity() {
             "Resume" to { missionCall("resumeMission") { cb -> WaypointMissionManager.getInstance().resumeMission(cb) } },
             "Stop" to { stopMission() },
         )
+        Ui.buttons(s5, "Query breakpoint" to { queryBreakPoint() }, "Resume from breakpoint" to { resumeFromBreakPoint() })
 
         // 6 Simulator
         val s6 = Ui.section(left, "6", "Simulator (SimulatorManager)",
@@ -809,6 +812,31 @@ class MainActivity : Activity() {
                     }
                 })
         }
+    }
+
+    // Pilot 2's "resume from breakpoint", through the SDK: the aircraft remembers where an interrupted route
+    // stopped; a start with that breakpoint carries on from there. What it does about actions already passed
+    // (start recording on waypoint 1) and the calibration passes is what the simulator test is for.
+    private fun queryBreakPoint() {
+        val f = currentMission() ?: run { Phase0Log.w("MISSION", "no KMZ selected"); return }
+        Phase0Log.i("MISSION", "queryBreakPointInfoFromAircraft ${f.nameWithoutExtension} …")
+        safe("MISSION", "queryBreakPointInfo") {
+            WaypointMissionManager.getInstance().queryBreakPointInfoFromAircraft(f.nameWithoutExtension, object : CommonCallbacks.CompletionCallbackWithParam<BreakPointInfo> {
+                override fun onSuccess(bp: BreakPointInfo?) {
+                    breakPoint = bp
+                    Phase0Log.i("MISSION", "breakpoint: wayline=${bp?.waylineID} waypoint=${bp?.waypointID} progress=${bp?.segmentProgress} recover=${bp?.recoverActionType} alt=${bp?.location?.altitude}")
+                    main.post { tvWaylineInfo.text = "breakpoint wp=${bp?.waypointID} progress=${bp?.segmentProgress}" }
+                }
+                override fun onFailure(error: IDJIError) { Phase0Log.e("MISSION", "queryBreakPointInfo FAIL ${error.fmt()}") }
+            })
+        }
+    }
+    private fun resumeFromBreakPoint() {
+        val f = currentMission() ?: run { Phase0Log.w("MISSION", "no KMZ selected"); return }
+        val bp = breakPoint ?: run { Phase0Log.w("MISSION", "no breakpoint: tap Query breakpoint first"); return }
+        if (simEnabledLast != true) { Phase0Log.e("MISSION", "NOT STARTED: the simulator is OFF."); return }
+        Phase0Log.i("MISSION", "startMission from breakpoint wp=${bp.waypointID} progress=${bp.segmentProgress} …")
+        missionCall("startMission(breakpoint)") { cb -> WaypointMissionManager.getInstance().startMission(f.nameWithoutExtension, bp, cb) }
     }
 
     private fun startMission() {
