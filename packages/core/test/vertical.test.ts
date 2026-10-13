@@ -97,8 +97,11 @@ test('turn rounding stays inside the terrain corridor; rounding and pull-up lag 
   // level ground: nothing to round vertically and nothing to lag behind
   const plan = planLines(poly, { aglM: 150 });
   const flat = applyHeights(plan, buildRoute(plan), () => 100);
-  // default damping is Pilot 2's own rule: a third of the shorter leg, at most 10 m
-  assert.ok(flat.wps.every(w => w.dampingM <= 10 + 1e-9) && flat.wps.some(w => Math.abs(w.dampingM - 10) < 1e-9));
+  // straight runs: 10 m, just enough to fly through; corners: the turn radius at 20° bank for the speed flown
+  // in (17 m/s → 81 m), held to a third of the shorter leg and the 60 m cap
+  assert.ok(flat.wps.filter(w => w.role === 'line').every(w => Math.abs(w.dampingM - 10) < 1e-9));
+  const corner = flat.wps.findIndex((w, i) => w.role === 'runout' && flat.wps[i + 1]?.role === 'runin');
+  assert.ok(Math.abs(flat.wps[corner].dampingM - Math.min(60, plan.spacing / 3, 17 * 17 / (9.81 * Math.tan(20 * Math.PI / 180)))) < 1e-6, `corner damping ${flat.wps[corner].dampingM}`);
   assert.ok(flat.wps.every(w => w.roundingM === 0 && w.lagM === 0));
   const b = clearanceBudget(plan, flat, 20);
   assert.deepEqual([b.aglM, b.pathM, b.uncertaintyM, b.worstCaseM], [150, 0, 20, 130]);

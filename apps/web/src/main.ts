@@ -121,6 +121,7 @@ const FIELDS: Field<keyof PlanOptions>[] = [
   { key: 'descentMs', label: 'Max descent rate', unit: 'm/s', step: 0.5, min: 0.5, max: M400_LIMITS.descentMaxMs, vmode: 'slow' },
   { key: 'maxGradient', label: 'Max gradient', unit: 'rise/run', step: 0.01, min: 0.01, max: 0.5, vmode: 'raise' },
   { key: 'fig8BankDeg', label: 'Figure-8 bank', unit: '°', step: 1, min: 5, max: M400_LIMITS.bankMaxDeg, only: 'lidar' },
+  { key: 'turnBankDeg', label: 'Line-end turn bank', unit: '°', step: 1, min: 5, max: M400_LIMITS.bankMaxDeg },
 ];
 const TK_FIELDS: Field<'takeoffSecurityM' | 'transitSpeedMs' | 'minClearanceM'>[] = [
   { key: 'takeoffSecurityM', label: 'Take-off security height', unit: 'm', step: 5, min: 2, max: 1500 },

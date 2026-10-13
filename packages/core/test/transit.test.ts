@@ -52,6 +52,11 @@ test('in-route transit: the route starts and ends above home, with waypoints all
   const plain = buildRoute(plan);
   assert.equal(plain.wps[0].role, 'approach');
   assert.ok(plain.wps.every(x => !isStop(x) && x.role !== 'transit'));
+  // corners between lines are coordinated turns; everything else flies through on straight legs
+  for (let i = 1; i < plain.wps.length - 1; i++) {
+    const corner = (plain.wps[i].role === 'runout' && plain.wps[i + 1].role === 'runin') || (plain.wps[i].role === 'runin' && plain.wps[i - 1].role === 'runout');
+    assert.equal(plain.wps[i].turnMode, corner ? 'coordinateTurn' : 'toPointAndPassWithContinuityCurvature');
+  }
 });
 
 test('in-route transit follows the terrain over a ridge that the direct transit would hit', () => {

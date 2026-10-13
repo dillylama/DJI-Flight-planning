@@ -3,7 +3,7 @@ import type { Plan } from './plan.ts';
 
 export type Role = 'transit' | 'approach' | 'fig8' | 'runin' | 'line' | 'runout' | 'exit';
 export type Action = 'START_RECORD' | 'STOP_RECORD';
-export type TurnMode = 'toPointAndPassWithContinuityCurvature' | 'toPointAndStopWithDiscontinuityCurvature';
+export type TurnMode = 'toPointAndPassWithContinuityCurvature' | 'toPointAndStopWithDiscontinuityCurvature' | 'coordinateTurn';
 export const STOP_TURN: TurnMode = 'toPointAndStopWithDiscontinuityCurvature';
 export const isStop = (w: { turnMode: string }) => w.turnMode === STOP_TURN;
 
@@ -41,10 +41,15 @@ export interface BuildOptions {
   // aircraft's own straight "fly to route" leg. The route then starts and ends above home, and the approach
   // and exit waypoints, where recording starts and stops, are stop turns.
   transit?: { home: XY; speedMs: number; clearanceM: number } | null;
+  // Turn mode at the corners between lines (run-out → run-in). 'coordinate' (default) is DJI's coordinateTurn:
+  // in the M400 simulator (13 Oct 2026) it flew 90° corners at 6–7 m/s on a 10 m/s route, passing 4–6 m inside
+  // the corner with 20 m damping; 'pass' (fly-through on straight legs) slowed to 3 m/s and pivoted at the
+  // corner whatever the damping. Line waypoints stay fly-through, so the legs are straight.
+  cornerMode?: 'pass' | 'coordinate';
 }
 
 // Full job, a resume from any line, or one sortie (a line range).
-export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true, fig8End, startLine, endLine, transit = null }: BuildOptions = {}): Route {
+export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true, fig8End, startLine, endLine, transit = null, cornerMode = 'coordinate' }: BuildOptions = {}): Route {
   const { o, d, c, lines } = plan;
   const v = speedMs || o.speedMs;
   const endEight = fig8End ?? fig8;
@@ -117,15 +122,29 @@ export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true, fig
   end.actions.push('STOP_RECORD');
   if (transit) { end.stop = true; end.speed = transit.speedMs; ferry(end.xy, transit.home, false); }
 
-  // Damping per waypoint: fraction of the shorter adjacent leg (DJI requires < leg length).
+  // Damping per waypoint. Where the heading changes, the turn radius at turnBankDeg for the speed flown into
+  // the waypoint, so the aircraft can round the corner at speed (it passes r·(sec(θ/2) − 1) inside it, 0.41 r
+  // for a right angle); on a straight run just enough to fly through. Never more than dampingFrac of the
+  // shorter adjacent leg, which keeps the two dampings on any leg inside it (DJI requires that), or dampingMaxM.
+  // applyHeights shortens it again where the vertical rounding or the terrain corridor needs it.
   const out: RouteWp[] = wps.map(({ stop, ...w }, i) => {
     const legs: number[] = [];
     if (i > 0) legs.push(dist(w.xy, wps[i - 1].xy));
     if (i < wps.length - 1) legs.push(dist(w.xy, wps[i + 1].xy));
+    let want = 10;
+    if (i > 0 && i < wps.length - 1) {
+      const ax = w.xy[0] - wps[i - 1].xy[0], ay = w.xy[1] - wps[i - 1].xy[1], bx = wps[i + 1].xy[0] - w.xy[0], by = wps[i + 1].xy[1] - w.xy[1];
+      const theta = Math.abs(Math.atan2(ax * by - ay * bx, ax * bx + ay * by));
+      if (theta > 5 * D2R) {
+        const vIn = wps[i - 1].speed, r = (vIn * vIn) / (G * Math.tan(o.turnBankDeg * D2R));
+        want = Math.max(10, r * Math.tan(Math.min(theta, Math.PI / 2) / 2));
+      }
+    }
+    const corner = cornerMode === 'coordinate' && ((w.role === 'runout' && wps[i + 1]?.role === 'runin') || (w.role === 'runin' && wps[i - 1]?.role === 'runout'));
     return {
       ...w,
-      dampingM: stop ? 0 : Math.min(o.dampingMaxM, o.dampingFrac * Math.min(...legs)),
-      turnMode: stop ? STOP_TURN : 'toPointAndPassWithContinuityCurvature',
+      dampingM: stop ? 0 : Math.min(o.dampingMaxM, o.dampingFrac * Math.min(...legs), want),
+      turnMode: stop ? STOP_TURN : corner ? 'coordinateTurn' : 'toPointAndPassWithContinuityCurvature',
     };
   });
 
