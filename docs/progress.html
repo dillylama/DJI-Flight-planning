@@ -60,6 +60,9 @@
   th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
   td.m { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+  span.m { font-family: var(--mono); font-size: .88em; overflow-wrap: anywhere; }
+  .card > ul, .step ul, p, .banner, .pass { overflow-wrap: break-word; }
+  .step > div, .card, .tile { min-width: 0; }
   .scroll { overflow-x: auto; }
   .log { font-size: 14px; }
   .log .d { font: 500 13px var(--mono); color: var(--muted); }
@@ -69,21 +72,38 @@
 <div class="wrap">
 <header>
   <h1><span class="mark">3DM</span>M400 + Zenmuse L3 mission system</h1>
-  <span class="updated" id="updated">Updated 25 Sep 2026, 13:40 SAST</span>
+  <span class="updated" id="updated">Updated 3 Oct 2026, 15:13 SAST</span>
 </header>
 
 <div class="status-row">
-  <div class="tile"><div class="k">Build</div><div class="v">8 / 8</div><div class="s">PRs merged on main</div></div>
-  <div class="tile"><div class="k">Tests</div><div class="v">48</div><div class="s">core 33 + API 15, all passing</div></div>
-  <div class="tile"><div class="k">Planner</div><div class="v">Live</div><div class="s"><a href="https://planner.3dronemapping.com">planner.3dronemapping.com</a></div></div>
+  <div class="tile"><div class="k">Build</div><div class="v">8 + 1</div><div class="s">8 merged, <a href="https://github.com/dillylama/DJI-Flight-planning/pull/9">PR 9</a> waiting for review</div></div>
+  <div class="tile"><div class="k">Tests</div><div class="v">79</div><div class="s">core 64 + API 15, all passing</div></div>
+  <div class="tile"><div class="k">Live planner</div><div class="v">Old</div><div class="s">still the 25 Sep version until PR 9 is merged and deployed</div></div>
   <div class="tile"><div class="k">Flights flown</div><div class="v">0</div><div class="s">nothing imported or flown yet</div></div>
-  <div class="tile"><div class="k">Next gate</div><div class="v">G1</div><div class="s">Pilot 2 import test (Luke, RC)</div></div>
+  <div class="tile"><div class="k">Next gate</div><div class="v">G1</div><div class="s">Pilot 2 import, Tue 6 Oct</div></div>
 </div>
 
-<div class="banner"><b>Safety status:</b> the planner writes files that match Pilot 2's own output exactly, but no route it produced has been imported or flown. Until gates G1–G3 below pass, treat every route as unproven. An independent adversarial review of the height and speed code is running today (25 Sep).</div>
+<div class="banner"><b>Safety status:</b> the review is finished. It found faults in the 25 Sep planner that could put a route below terrain. All are fixed in PR 9, which also adds an independent check of every exported file. PR 9 is <b>not merged or deployed</b>: do not export a route from planner.3dronemapping.com until it is. No route has been imported into Pilot 2 or flown, so everything about how the aircraft handles these files is still unproven.</div>
+
+<h2>What the review found</h2>
+<p>Every row is fixed in PR 9 and has a test that fails if the fault comes back.</p>
+<div class="scroll"><table>
+  <tr><th>Fault in the 25 Sep planner</th><th>What it could have done</th></tr>
+  <tr><td>Demo terrain stayed loaded when a real block was opened</td><td>A real route planned on made-up ground. At the sample site the plan came out 130–500 m below the true surface, with export enabled.</td></tr>
+  <tr><td>GLO-30 terrain read half a cell off</td><td>Ground shifted 13 m east and 15 m south under every route.</td></tr>
+  <tr><td>Gaps in a DEM were skipped</td><td>A DTM ending inside the corridor put run-in waypoints up to 25 m below ground. A void hiding a ridge showed 100 m clearance on the way home where the truth was a hillside.</td></tr>
+  <tr><td>Terrain sampled at points, not cell by cell</td><td>Legs clearing the DEM by 89 m of a planned 100 m. A single-cell peak on an RTH line was missed in 3 positions out of 4.</td></tr>
+  <tr><td>The file asked for a fully curved path</td><td>The aircraft free to dip below the straight legs that were checked, by 8–28 m in the review's model.</td></tr>
+  <tr><td>Only the whole job was checked, then sorties were exported</td><td>A sortie with legs too steep to fly went out with no warning.</td></tr>
+  <tr><td>Figure-8s followed the terrain</td><td>Up to 91 m of height change and legs slowed to 1.5 m/s inside an alignment manoeuvre.</td></tr>
+  <tr><td>RTH height and Max Altitude were only advice</td><td>The file says "return home" on signal loss and at the end, but cannot carry the height. Nothing made sure it was set.</td></tr>
+  <tr><td>Input limits were not enforced</td><td>AGL 3 m and a zero-width terrain corridor were accepted. A failed calculation could leave the previous plan exportable.</td></tr>
+  <tr><td>A user DTM's height datum was never asked</td><td>Every flight height off by the geoid separation, about 32 m around Prince Albert.</td></tr>
+  <tr><td>Map distances 0.4 % long north–south</td><td>Small, but the new file check caught it. The planner now uses true distances on the ellipsoid.</td></tr>
+</table></div>
 
 <h2>What "working" means, and the gates to get there</h2>
-<p>Each gate proves one link in the chain, from a file on the RC to a point cloud from a real job. A gate must pass cleanly before the next; a failure means we fix and repeat, not skip.</p>
+<p>Each gate proves one link in the chain, from a file on the RC to a point cloud from a real job. A gate must pass cleanly before the next. A failure means fix and repeat, not skip.</p>
 
 <div class="timeline">
   <div class="step">
@@ -91,92 +111,125 @@
     <div>
       <span class="pill done">Done</span> <h3>Office planner, sync server, route-file writer</h3>
       <ul>
-        <li>Planner live at planner.3dronemapping.com: block import, GLO-30 terrain, LiDAR/photogrammetry modes, M400 limits, home/take-off/RTH checks, sorties, 3D view, overlaps.</li>
-        <li>Route files built from Luke's two Pilot 2 exports; our file reproduces Pilot 2's field for field (M400 = 103, L3 = 117, EGM96 heights to 0.1 mm).</li>
-        <li>Terrain-following speed limiter (climb 4 / descent 3 m/s), figure-8 at both ends, DJI IMU calibration before/after.</li>
-        <li>Sync server on Cloudflare (D1 + R2): publish, RC pairing codes, downloads, log upload. Phase 0 RC test app built (not yet run).</li>
+        <li>Planner at planner.3dronemapping.com: block import, GLO-30 terrain, LiDAR and photogrammetry modes, M400 limits, home, take-off and RTH checks, sorties, 3D view, overlaps.</li>
+        <li>Route files built from the two Pilot 2 exports (M400 = 103, L3 = 117, EGM96 heights to 0.1 mm).</li>
+        <li>Sync server on Cloudflare. Phase 0 RC test app built, not yet run.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="when"><b>3 Oct</b>done, in PR 9</div>
+    <div>
+      <span class="pill done">Done</span> <h3>Safety hardening</h3>
+      <ul>
+        <li>Every straight leg clears the highest DEM cell touching its corridor by the full AGL. A gap in the DEM stops the plan.</li>
+        <li><b>Independent file check:</b> each KMZ is built, read back by separate code and checked against the terrain. Only files that pass can be downloaded or published.</li>
+        <li><b>Clearance budget</b> shown in the planner: AGL − path rounding and lag − your uncertainty allowance (20 m by default). Export refused below 30 m.</li>
+        <li>Straight legs in the file; steep legs and the legs around them slowed so climb and descent stay within 4 and 3 m/s.</li>
+        <li>Export shows the RTH height, Max Altitude and height at waypoint 1 for each sortie, puts them in the file name and asks you to confirm.</li>
+        <li>Proof the tests work: the planner was broken on purpose in 18 ways and the test suite caught all 18.</li>
       </ul>
     </div>
   </div>
 
   <div class="step now">
-    <div class="when"><b>25–26 Sep</b>now</div>
+    <div class="when"><b>Tue 6 Oct</b>needs the RC</div>
     <div>
-      <span class="pill now">In progress</span> <h3>Safety hardening</h3>
+      <span class="pill luke">Luke</span> <span class="gate">GATE G1</span> <h3>Pilot 2 import test (no aircraft, no props)</h3>
       <ul>
-        <li>Adversarial review of heights, speed limiter, transit/RTH, DEM reading and the file writer (running).</li>
-        <li>Add a terrain-uncertainty margin (GLO-30 is a 30 m surface model, ±4 m and worse on slopes, includes canopy).</li>
-        <li>Check that fly-through turns, which cut inside the corner, stay inside the sampled terrain corridor.</li>
-        <li>Fix anything the review raises before G1.</li>
+        <li>Copy the eight <span class="m">.kmz</span> files from <span class="m">C:\Claude\M400\samples\generated\</span> to the RC and import them in Pilot 2. The steps are in the README in that folder.</li>
+        <li><b>test-01:</b> does it import, draw in the right place, and show the L3 actions? Note the height Pilot 2 shows for waypoint 1 and the highest waypoint, the speed, and whether legs are drawn straight.</li>
+        <li><b>Then save test-01 in Pilot 2 unchanged and export it again.</b> Copy that file back as <span class="m">samples\pilot2-reexport-test-01.kmz</span>. Comparing it with ours shows exactly what Pilot 2 changes. This is the most useful single check.</li>
+        <li><b>test-02, test-03:</b> does Pilot 2 show 15 and 17 m/s, or cut 17 down to 15?</li>
+        <li><b>test-cap-0250 … 5000:</b> the largest file that imports cleanly is the waypoint cap per route.</li>
+      </ul>
+      <div class="pass"><b>Pass:</b> the re-export matches ours (heights within 0.1 m; speeds, turn settings and actions unchanged) and a cap number is known. <b>Fail:</b> any rejection, clamped speed or changed value. Then the writer is adjusted and the test repeated.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="when"><b>After G1</b>RC + M400, props off</div>
+    <div>
+      <span class="pill luke">Luke</span> <span class="gate">GATE G2</span> <h3>Bench test in the DJI simulator</h3>
+      <ul>
+        <li>Run <b>test-01</b> in the simulator, started from the ground. Watch the height at waypoint 1, speed on the slowed legs, whether the aircraft stops or rounds at waypoints, and L3 recording on the approach point.</li>
+        <li>Press RTH mid-line and pull the RC link once: does it climb to the RTH height that was set?</li>
+        <li>Phase 0 app: SDK registers, M400 connects, L3 detected, recording start and stop from the app. Script in <span class="m">apps/rc/README.md</span>.</li>
+      </ul>
+      <div class="pass"><b>Pass:</b> the route runs to the end never more than a few metres below the planned legs, vertical rates within limits, RTH at the set height, recording controlled as planned.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="when"><b>After G2</b>first live flight</div>
+    <div>
+      <span class="pill luke">Luke</span> <span class="gate">GATE G3</span> <h3>Small, flat, high, in sight, RTK fixed</h3>
+      <ul>
+        <li>About 300 × 300 m of flat open ground, 150 m AGL or more, 8–10 m/s, VLOS, route exported from the deployed planner with home set.</li>
+        <li>Before take-off: the aircraft's height on the ground should match the DEM height of the home point. At waypoint 1 the RC should show the planner's "height at WP 1" within about 10 m. If not, stop.</li>
+        <li>Afterwards: compare the flight log with the plan, and check the L3 range to ground against the planned AGL.</li>
+      </ul>
+      <div class="pass"><b>Pass:</b> flown as planned, L3 range to ground within 5 m of plan on every line, no manual intervention.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="when"><b>After G3</b>real slopes</div>
+    <div>
+      <span class="pill next">Gate G4</span> <h3>Terrain, planned 100 m higher than the job needs</h3>
+      <ul>
+        <li>A block with real relief, flown 100 m above the AGL the job would use, so an error has room.</li>
+        <li>Then a production job: step down only if measured AGL never fell more than 10 m below plan. Never below 100 m AGL on GLO-30. Obstacle survey done.</li>
       </ul>
     </div>
   </div>
 
   <div class="step">
-    <div class="when"><b>Week of 29 Sep</b>needs the RC</div>
-    <div>
-      <span class="pill luke">Luke</span> <span class="gate">GATE G1</span> <h3>Pilot 2 import test (no aircraft needed)</h3>
-      <ul>
-        <li>Import the files in <span class="m">Downloads\m400-import-tests\</span> into Pilot 2 on the RC.</li>
-        <li><b>test-01</b>: does it import, draw in the right place, and show "start point cloud recording", IMU calibration and "stop" on its waypoints?</li>
-        <li><b>test-cap-0250 … 5000</b>: the largest file that imports cleanly is our waypoint cap per route.</li>
-        <li>Also: does Pilot 2's Waypoint Route editor offer "Start point cloud recording" as an action for the L3?</li>
-      </ul>
-      <div class="pass"><b>Pass:</b> test-01 imports with all actions visible; a cap number is known. <b>Fail:</b> any rejection or silently dropped action → we adjust the writer and repeat.</div>
-    </div>
-  </div>
-
-  <div class="step">
-    <div class="when"><b>Week of 29 Sep</b>RC + M400, props off</div>
-    <div>
-      <span class="pill luke">Luke</span> <span class="gate">GATE G2</span> <h3>Bench test in the DJI simulator (Phase 0 app)</h3>
-      <ul>
-        <li>Install <span class="m">app-debug.apk</span> on the RC (needs internet once to register the DJI key). Script in <span class="m">apps/rc/README.md</span>.</li>
-        <li>SDK registers, M400 connects, telemetry shows; L3 detected on its port; recording start/stop works from the app.</li>
-        <li>Push and run <b>test-01</b> in the simulator. Watch: altitude vs waypoint heights, speed on slowed legs (does it ramp to the next waypoint's speed?), L3 recording on the approach point, calibration passes.</li>
-        <li>Read-only probe of Pilot 2's route storage.</li>
-        <li>Send the log file back (<span class="m">adb pull … /files/logs</span>).</li>
-      </ul>
-      <div class="pass"><b>Pass:</b> mission runs to the end with altitude within a few metres of plan and recording controlled as planned. <b>Fail on L3 keys:</b> the RC app becomes sync + Pilot 2 injection only; flying stays in Pilot 2.</div>
-    </div>
-  </div>
-
-  <div class="step">
-    <div class="when"><b>Early Oct</b>after G2</div>
-    <div>
-      <span class="pill luke">Luke</span> <span class="gate">GATE G3</span> <h3>First live flight: small, flat, high, in sight</h3>
-      <ul>
-        <li>Block about 300 × 300 m of flat open ground, 120 m AGL, 8–10 m/s, VLOS, RTH height set on the aircraft above the planned route.</li>
-        <li>Fly the planner's KMZ via Pilot 2 (or the app if G2 passed). Pilot ready to take over at any point.</li>
-        <li>Afterwards: compare the flight log to the plan (heights, speeds, where recording started/stopped); process in DJI Terra and check IMU alignment quality.</li>
-      </ul>
-      <div class="pass"><b>Pass:</b> flown as planned, point cloud continuous, no manual intervention. Then repeat once over gentle terrain with slowed legs before any steep block.</div>
-    </div>
-  </div>
-
-  <div class="step">
-    <div class="when"><b>Oct</b>parallel build</div>
+    <div class="when"><b>Parallel</b>after G2</div>
     <div>
       <span class="pill next">Next build</span> <h3>RC app v1 ("3DM Fly")</h3>
       <ul>
-        <li>Sync client (pull published missions offline), pre-flight checklist (RTK, IMU, L3 ready, SD space, battery vs sortie, RTH height vs terrain).</li>
-        <li>Fly and monitor: current line/waypoint, AGL vs DEM, recording state with alarm, time to go vs battery.</li>
-        <li>Auto-resume after a stop with a fresh figure-8; sortie sequencing; as-flown logs back to the office.</li>
-        <li>Pilot 2 path: write KMZ for "Import route" (file injection is unofficial on Android 11).</li>
+        <li>Pull published missions offline and fly the exact KMZ the office checked (verified by its SHA-256).</li>
+        <li>Set the RTH height on the aircraft and read it back; refuse to start if the take-off point is not the planned home or RTK is not fixed.</li>
+        <li>Monitor line, AGL against the DEM and recording state; auto-resume; as-flown logs back to the office.</li>
       </ul>
     </div>
   </div>
+</div>
 
-  <div class="step">
-    <div class="when"><b>Mid Oct</b>first real job</div>
-    <div>
-      <span class="pill next">Gate G4</span> <h3>Production job</h3>
-      <ul>
-        <li>Real block with the L3 at the chosen pulse rate, sorties as planned, resume tested once on purpose.</li>
-        <li>Deliverable checked in Terra: strip alignment, density, coverage vs the planner's overlap prediction.</li>
-      </ul>
-    </div>
+<h2>Still unproven until the hardware says so</h2>
+<div class="two">
+  <div class="card">
+    <h3>What Pilot 2 and the M400 do with the file</h3>
+    <ul>
+      <li>Does Pilot 2 keep per-waypoint heights, speeds and turn settings when it imports and saves?</li>
+      <li>Does it accept waypoint speeds above 15 m/s? The planner's default line speed is 17 m/s.</li>
+      <li>How does the M400 round a fly-through waypoint on straight legs, and how closely does it hold a steep leg?</li>
+      <li>The waypoint cap, and L3 recording started from a waypoint action.</li>
+    </ul>
   </div>
+  <div class="card">
+    <h3>What no planner can know</h3>
+    <ul>
+      <li>Obstacles that are not in the DEM: masts, power lines, cranes, turbines, new buildings, taller trees.</li>
+      <li>DEM error beyond the allowance. GLO-30 is about 4 m on open ground and can be 10–20 m on steep or forested slopes; its data is from 2011–2015.</li>
+      <li>The aircraft's own height without RTK: 5–15 m or more.</li>
+      <li>A take-off from somewhere other than the planned home, or a mission started in the air.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Before every flight</h2>
+<div class="card">
+  <ul>
+    <li><b>RTH height</b> at least the value in the file name (<span class="m">…_RTH330_…</span>), with the preset-height RTH mode.</li>
+    <li><b>Max Altitude</b> at least the value in the file name (<span class="m">…_ALT430</span>).</li>
+    <li><b>Take off from the planned home point</b>, from the ground. Transit and RTH were checked from there.</li>
+    <li><b>RTK fixed.</b> Heights in the file are absolute.</li>
+    <li><b>At waypoint 1</b> the RC shows the planned height above take-off, within about 10 m. If not, stop the mission.</li>
+    <li><b>Obstacles</b> that are not in the DEM have been checked for the area.</li>
+  </ul>
 </div>
 
 <h2>Open items</h2>
@@ -184,19 +237,19 @@
   <div class="card">
     <h3>Needs Luke</h3>
     <ul>
-      <li>G1 import test results (files in <span class="m">Downloads\m400-import-tests\</span>).</li>
-      <li>G2 bench test with the RC and M400 (props off).</li>
+      <li>Review and merge <a href="https://github.com/dillylama/DJI-Flight-planning/pull/9">PR 9</a>, then deploy, so the live planner has the fixes.</li>
+      <li>G1 on Tuesday: import, re-export test-01, speeds, waypoint cap.</li>
+      <li>Decide: on signal loss, return home (as now) or continue the route? "Continue" needs a Pilot 2 export with that option, to copy its exact spelling.</li>
+      <li>Two more Pilot 2 exports would remove guesswork: a waypoint route with a speed and height change and an action on one waypoint, and an L3 area route with terrain follow on.</li>
       <li>Decide on Cloudflare Access (email sign-in) for the office side of the planner.</li>
-      <li>Optional: a Pilot 2 export with a different scan mode / return count, so those values can be verified too.</li>
     </ul>
   </div>
   <div class="card">
-    <h3>Claude, in order</h3>
+    <h3>Build queue, in order</h3>
     <ul>
-      <li>Act on the safety review; add the terrain-uncertainty margin and turn-corridor check.</li>
+      <li>After G1: run the comparison, adjust the writer if Pilot 2 changed anything, set the waypoint cap and the speed limit in the planner.</li>
+      <li>After G2: replace the assumed braking and vertical acceleration (2 m/s²) with measured values; start RC app v1.</li>
       <li>Keep this page current at every milestone.</li>
-      <li>After G1: adjust the writer if needed, set the waypoint cap in the planner.</li>
-      <li>After G2: start RC app v1.</li>
     </ul>
   </div>
 </div>
@@ -204,18 +257,21 @@
 <h2>Where things live</h2>
 <div class="scroll"><table>
   <tr><th>Thing</th><th>Where</th></tr>
-  <tr><td>Planner (live)</td><td class="m"><a href="https://planner.3dronemapping.com">https://planner.3dronemapping.com</a></td></tr>
+  <tr><td>Planner (live, 25 Sep version)</td><td class="m"><a href="https://planner.3dronemapping.com">https://planner.3dronemapping.com</a></td></tr>
   <tr><td>Code</td><td class="m"><a href="https://github.com/dillylama/DJI-Flight-planning">github.com/dillylama/DJI-Flight-planning</a></td></tr>
-  <tr><td>Import test files</td><td class="m">C:\Users\luke\Downloads\m400-import-tests\</td></tr>
+  <tr><td>Import test files + README</td><td class="m">C:\Claude\M400\samples\generated\</td></tr>
+  <tr><td>Pilot 2 re-export goes here</td><td class="m">C:\Claude\M400\samples\pilot2-reexport-test-01.kmz</td></tr>
   <tr><td>RC test app</td><td class="m">C:\Claude\M400\apps\rc\app\build\outputs\apk\debug\app-debug.apk</td></tr>
   <tr><td>Office token for the planner</td><td class="m">C:\Claude\M400\deploy\planner\admin-token.local</td></tr>
+  <tr><td>Safety case</td><td class="m">docs/safety.md</td></tr>
   <tr><td>Research notes</td><td class="m">docs/ugcs-notes.md, docs/wpml.md, docs/equipment.md, docs/msdk-research.md</td></tr>
 </table></div>
 
 <h2>Change log</h2>
 <div class="log">
-  <p><span class="d">25 Sep 13:40</span> Page created. PR #8 merged and deployed: terrain-following speed limiter, figure-8 at both ends, overlap bands. Safety review started.</p>
-  <p><span class="d">25 Sep</span> Sync server and planner deployed to Cloudflare; planner.3dronemapping.com live. Route-file writer built from Luke's Pilot 2 samples. Sortie splitting.</p>
-  <p><span class="d">25 Sep</span> Planner v0.1–0.3: 3D view, home/RTH, sensors and M400 limits, 3DM branding. Phase 0 RC app built.</p>
+  <p><span class="d">3 Oct 15:13</span> Safety review finished and acted on (PR 9). Import test files regenerated in <span class="m">C:\Claude\M400\samples\generated\</span>, each one passed the file check. Gates rewritten: G1 now includes the Pilot 2 re-export comparison.</p>
+  <p><span class="d">25 Sep 13:40</span> Page created. PR 8 merged and deployed: terrain-following speed limiter, figure-8 at both ends, overlap bands. Safety review started.</p>
+  <p><span class="d">25 Sep</span> Sync server and planner deployed to Cloudflare; planner.3dronemapping.com live. Route-file writer built from the Pilot 2 samples. Sortie splitting.</p>
+  <p><span class="d">25 Sep</span> Planner v0.1–0.3: 3D view, home and RTH, sensors and M400 limits, 3DM branding. Phase 0 RC app built.</p>
 </div>
 </div>

@@ -1,6 +1,7 @@
 export * from './geo.ts';
 export * from './plan.ts';
 export * from './route.ts';
+export * from './terrain.ts';
 export * from './heights.ts';
 export * from './stats.ts';
 export * from './dem.ts';
@@ -11,3 +12,5 @@ export * from './sensor.ts';
 export * from './equipment.ts';
 export * from './sorties.ts';
 export * from './wpml.ts';
+export * from './safety.ts';
+export * from './verify.ts';

@@ -29,6 +29,24 @@ a 5-waypoint **Waypoint Route** and a small L3 **Area Route** (LiDAR mapping). T
 Pilot 2 writes the **first and last waypoint** as `toPointAndStopWithDiscontinuityCurvature` with damping 0. The
 waypoints in between use the chosen mode (`toPointAndPassWithContinuityCurvature`, damping 10 m in the sample).
 
+The waypoint sample was saved with `useStraightLine 0`: the whole path between waypoints is then a free curve
+(DJI: "the whole trajectory of the segment is curved"), and nothing in the file bounds how far it strays from
+the straight legs. Pilot 2's own L3 area route flies `useStraightLine 1` with stop turns at the line ends.
+
+**Our routes write `useStraightLine 1`** on every waypoint and in `globalUseStraightLine`: straight legs,
+rounded over the turn damping distance at each fly-through waypoint (DJI requires the damping for that
+combination). Terrain clearance is computed for exactly that shape. Damping per waypoint is 40 % of the shorter
+adjacent leg (max 60 m), then shortened wherever the rounding would pass more than 5 m below the legs or leave
+the terrain corridor sideways; the two dampings on a leg always add up to less than the leg.
+No Pilot 2 sample shows `useStraightLine 1` on fly-through waypoints yet: the import test covers it.
+
+## Per-waypoint values and the global fallbacks
+Every waypoint carries its own height, speed and turn settings (`useGlobalHeight 0`, `useGlobalSpeed 0`,
+`useGlobalTurnParam 0` in template.kml). The globals are written so that a reader which ignored the
+per-waypoint values would still be safe: `globalHeight` is the **highest** waypoint height and
+`autoFlightSpeed` the **slowest** waypoint speed. Speeds and damping are rounded down to 0.01.
+`waypointSpeed` is the speed from that waypoint to the next one.
+
 ## L3 actions (from the area route's `waylines.wpml`)
 | Where | Trigger | Actions |
 |---|---|---|
@@ -46,7 +64,9 @@ waypoints in between use the chosen mode (`toPointAndPassWithContinuityCurvature
 - Recording **starts once on the approach** (before the figure-8) and **stops once at the end**. There is no
   pause/resume in turns, so the trajectory stays continuous.
 - DJI's `aircraftCalibration` is added before start and after stop (option on by default).
-- L3 RGB shooting runs on each data line with DJI's pattern.
+- L3 RGB shooting runs from the first line waypoint to the **run-out** waypoint of each line and stops there, so
+  the stop action (an arrival action) is never on a data-line waypoint.
+- Arrival actions on one waypoint are merged into a single `reachPoint` group, in Pilot 2's order.
 
 ## Template payload parameters (L3)
 `returnMode sedecupleReturn` (16 returns), `samplingRate 350000` (Hz), `scanningMode repetitive`, `modelColoringEnable 1`.
@@ -58,5 +78,13 @@ Only these spellings are verified. The writer refuses other return and scan mode
 
 ## Still to verify on the RC
 1. Pilot 2 imports our KMZ (`samples/generated/test-01-small-l3-survey.kmz`) and shows the L3 actions.
-2. The waypoint cap (`test-cap-0250` … `test-cap-5000`).
-3. In the simulator: the L3 starts recording on the approach waypoint, and the calibration passes fly as expected.
+2. Pilot 2 keeps the route as written: import `test-01`, save, export it again, then
+   `node tools/compare-kmz.ts samples/generated/test-01-small-l3-survey.kmz <re-export>.kmz --dem samples/generated/dem.tif`.
+3. Waypoint speeds above 15 m/s (`test-02` at 15, `test-03` at 17 m/s): accepted, or cut to 15?
+4. The waypoint cap (`test-cap-0250` … `test-cap-5000`).
+5. In the simulator: the L3 starts recording on the approach waypoint, the calibration passes fly as expected,
+   and the aircraft's path at fly-through waypoints stays close to the straight legs.
+
+Samples still wanted: a waypoint route with a per-waypoint speed and height change and an action on a waypoint
+(the first sample had none), and an L3 area route with terrain follow on, to see how Pilot 2 itself writes
+terrain-following lines.

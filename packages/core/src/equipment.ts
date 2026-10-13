@@ -2,6 +2,7 @@ import { D2R, dist } from './geo.ts';
 import type { FlightWp } from './heights.ts';
 import type { Plan } from './plan.ts';
 import { legSpeed, type Route } from './route.ts';
+import { SAFETY } from './safety.ts';
 import type { Camera } from './sensor.ts';
 import { lensFovDeg } from './sensor.ts';
 import type { Issue } from './validate.ts';
@@ -63,6 +64,7 @@ export interface LimitContext {
   scanFovH?: number;
   sortieMin: number;
   totalMin: number;                 // incl. transit + RTH
+  topAboveHomeM?: number;           // highest point of the flight (route and transit) above the take-off point, when home is set
 }
 
 export function checkLimits(plan: Plan, flight: Route<FlightWp>, ctx: LimitContext): Issue[] {
@@ -111,6 +113,14 @@ export function checkLimits(plan: Plan, flight: Route<FlightWp>, ctx: LimitConte
   if (ctx.totalMin > ctx.sortieMin) {
     const n = Math.ceil(ctx.totalMin / ctx.sortieMin);
     issues.push({ severity: 'warn', code: 'SORTIES', message: `Estimated ${ctx.totalMin.toFixed(0)} min is more than one battery set (${ctx.sortieMin} min usable): about ${n} sorties. See the sortie split.` });
+  }
+
+  // DJI caps flight height above the take-off point, and the aircraft's own Max Altitude setting (120 m by
+  // default) must be raised to cover the route before it will accept it.
+  if (ctx.topAboveHomeM != null) {
+    const top = ctx.topAboveHomeM;
+    if (top > SAFETY.maxAboveHomeM) issues.push({ severity: 'error', code: 'MAX_ALTITUDE', message: `The flight reaches ${top.toFixed(0)} m above the take-off point; DJI's height limit is ${SAFETY.maxAboveHomeM} m. Take off from higher ground.` });
+    else issues.push({ severity: 'info', code: 'MAX_ALTITUDE', message: `The flight reaches ${top.toFixed(0)} m above the take-off point (route and take-off transit). Max Altitude on the aircraft must cover that and the RTH height: see "Max Altitude to set".` });
   }
   return issues;
 }

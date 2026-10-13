@@ -18,7 +18,7 @@ test('range build: startLine/endLine fly exactly those lines with a figure-8', (
 });
 
 test('sorties cover every line once, in order, each within the budget', () => {
-  const sp = planSorties(plan, flat, home, {}, { usableMin: 35 });
+  const sp = planSorties(plan, flat, home, {}, { usableMin: 40 });
   assert.ok(sp.sorties.length > 1, `sorties: ${sp.sorties.length}`);
   assert.equal(sp.sorties[0].fromLine, 0);
   assert.equal(sp.sorties.at(-1)!.toLine, plan.lines.length - 1);
@@ -33,10 +33,10 @@ test('sorties cover every line once, in order, each within the budget', () => {
 });
 
 test('a bigger budget means fewer sorties; overlap re-flies one line', () => {
-  const a = planSorties(plan, flat, home, {}, { usableMin: 35 }).sorties.length;   // one 6 km line + RTH ≈ 20 min
-  const b = planSorties(plan, flat, home, {}, { usableMin: 70 }).sorties.length;
+  const a = planSorties(plan, flat, home, {}, { usableMin: 40 }).sorties.length;   // one 6 km line + transit, RTH and 2 min fixed
+  const b = planSorties(plan, flat, home, {}, { usableMin: 80 }).sorties.length;
   assert.ok(b < a, `${b} < ${a}`);
-  const ov = planSorties(plan, flat, home, {}, { usableMin: 35, overlapLines: 1 }).sorties;
+  const ov = planSorties(plan, flat, home, {}, { usableMin: 40, overlapLines: 1 }).sorties;
   // a sortie re-flies the previous sortie's last line, unless that sortie was a single line (no progress otherwise)
   for (let i = 1; i < ov.length; i++) {
     const prev = ov[i - 1];
@@ -56,13 +56,29 @@ test('a single line longer than the budget is reported as an error', () => {
 });
 
 test('without home, sorties are timed on the route alone', () => {
-  const sp = planSorties(plan, flat, null, {}, { usableMin: 35 });
+  const sp = planSorties(plan, flat, null, {}, { usableMin: 40 });
   assert.ok(sp.sorties.every(so => so.transit === null && so.time.transit === 0));
   assert.ok(sp.issues.some(i => i.code === 'SORTIE_NO_HOME'));
 });
 
+test('sorties are confirmed with exact heights: only a single line can be over budget', () => {
+  // A ridge across the block slows many legs, so the quick estimate and the exact time differ.
+  const ridge = (lon: number) => { const x = (lon - lon0) / m * k; return 200 + 500 * Math.exp(-((x / 900) ** 2)); };
+  const hilly = planLines(poly, { aglM: 300, speedMs: 12, courseDeg: 90 });
+  for (const usableMin of [38, 45, 60]) {
+    const sp = planSorties(hilly, ridge, home, {}, { usableMin });
+    for (const so of sp.sorties) {
+      assert.ok(!so.overBudget || so.fromLine === so.toLine, `budget ${usableMin}: sortie ${so.index + 1} (lines ${so.fromLine}–${so.toLine}) takes ${so.time.total.toFixed(1)} min`);
+      assert.ok(so.time.fixed === 2 && Math.abs(so.time.total - (so.time.route + so.time.transit + so.time.rth + so.time.vertical + so.time.fixed)) < 1e-9);
+    }
+    assert.equal(sp.sorties.at(-1)!.toLine, hilly.lines.length - 1);
+    for (let i = 1; i < sp.sorties.length; i++) assert.equal(sp.sorties[i].fromLine, sp.sorties[i - 1].toLine + 1);
+    assert.ok(sp.issues.every(i => i.code !== 'SORTIE_TIME' || i.severity === 'error'));
+  }
+});
+
 test('resume start: sorties begin at firstLine', () => {
-  const sp = planSorties(plan, flat, home, {}, { usableMin: 35, firstLine: 7 });
+  const sp = planSorties(plan, flat, home, {}, { usableMin: 40, firstLine: 7 });
   assert.equal(sp.sorties[0].fromLine, 7);
   const h = applyHeights(plan, buildRoute(plan), flat);
   assert.ok(h.wps.length > 0);
