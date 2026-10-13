@@ -296,8 +296,8 @@ export function verifyRouteFiles(templateKml: string, waylinesWpml: string, opts
 
   // ── actions
   const all = P.flatMap(p => p.groups);
-  all.forEach((g, k) => {
-    if (g.id !== k) err('V_ACTIONS', `Action group ids are not 0…n in order (found ${g.id} at position ${k}).`);
+  if (new Set(all.map(g => g.id)).size !== all.length || all.some(g => !Number.isInteger(g.id) || g.id < 0)) err('V_ACTIONS', `Action group ids must be whole numbers, each used once (found ${all.map(g => g.id).join(', ')}).`);
+  all.forEach(g => {
     if (!(g.start >= 0 && g.end >= g.start && g.end < n)) err('V_ACTIONS', `Action group ${g.id} spans waypoints ${g.start}–${g.end}, outside the route.`);
     if (!TRIGGERS.includes(g.trigger)) err('V_ACTIONS', `Action group ${g.id} has trigger "${g.trigger}".`);
     if (g.trigger.startsWith('multiple') && !(g.triggerParam > 0)) err('V_ACTIONS', `Action group ${g.id} has no trigger interval.`);
@@ -324,8 +324,11 @@ export function verifyRouteFiles(templateKml: string, waylinesWpml: string, opts
       if (!(Math.abs(a.hEllipsoid - b.hEllipsoid) <= 1e-4)) { bad(i, `ellipsoid height ${a.hEllipsoid} vs ${b.hEllipsoid}`); break; }
       if (!(Math.abs(egm96ToEllipsoid(a.lat, a.lon, a.hEgm96) - a.hEllipsoid) <= 0.01)) { bad(i, `EGM96 height ${a.hEgm96} does not match its ellipsoid height ${a.hEllipsoid}`); break; }
       if (a.speed !== b.speed) { bad(i, `speed ${a.speed} vs ${b.speed}`); break; }
-      if (a.turnMode !== b.turnMode || a.damping !== b.damping || a.straight !== b.straight) { bad(i, 'turn settings'); break; }
-      if (JSON.stringify(a.groups) !== JSON.stringify(b.groups)) { bad(i, 'actions'); break; }
+      // Pilot 2 keeps the template's damping and shortens the executed one; longer than the template is wrong.
+      const stopEnd = STOP_MODES.includes(b.turnMode);
+      if (a.turnMode !== b.turnMode || !(b.damping <= a.damping + 1e-6 || stopEnd) || (!stopEnd && a.straight !== b.straight)) { bad(i, 'turn settings'); break; }
+      const acts = (p: FileWaypoint) => JSON.stringify(p.groups.map(g => [g.start, g.end, g.trigger, g.triggerParam, g.actions]));
+      if (acts(a) !== acts(b)) { bad(i, 'actions'); break; }
     }
   }
   // Fail-safe fallbacks: a reader that ignored the per-waypoint values would fly everything at the global

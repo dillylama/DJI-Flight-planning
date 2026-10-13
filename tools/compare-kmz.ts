@@ -28,7 +28,8 @@ const HEAD: (keyof ParsedRoute)[] = ['namespace', 'drone', 'payload', 'payloadPo
 function compare(kind: string, a: ParsedRoute, b: ParsedRoute) {
   console.log(`\n── ${kind}`);
   const before = differences;
-  for (const k of HEAD) if (JSON.stringify(a[k]) !== JSON.stringify(b[k]) && !(Number.isNaN(a[k] as number) && Number.isNaN(b[k] as number))) diff(String(k), a[k], b[k]);
+  const same = (x: unknown, y: unknown) => (typeof x === 'number' && typeof y === 'number' ? Math.abs(x - y) < 1e-3 || (Number.isNaN(x) && Number.isNaN(y)) : JSON.stringify(x) === JSON.stringify(y));
+  for (const k of HEAD) if (!same(a[k], b[k])) diff(String(k), a[k], b[k]);
   if (JSON.stringify(a.startActions) !== JSON.stringify(b.startActions)) diff('start actions', a.startActions, b.startActions);
   if (a.waypoints.length !== b.waypoints.length) { diff('waypoint count', a.waypoints.length, b.waypoints.length); return; }
   const worst = { pos: 0, h: 0, hEll: 0 };
@@ -43,8 +44,12 @@ function compare(kind: string, a: ParsedRoute, b: ParsedRoute) {
     if (Math.abs(p.hEllipsoid - q.hEllipsoid) > 0.1) note('ellipsoid height', i, +p.hEllipsoid.toFixed(2), +q.hEllipsoid.toFixed(2));
     if (Math.abs(p.speed - q.speed) > 0.011) note('speed', i, p.speed, q.speed);
     if (p.turnMode !== q.turnMode) note('turn mode', i, p.turnMode, q.turnMode);
-    if (!(Math.abs(p.damping - q.damping) <= 0.011) && !(Number.isNaN(p.damping) && Number.isNaN(q.damping))) note('turn damping', i, p.damping, q.damping);
-    if (p.straight !== q.straight) note('useStraightLine', i, p.straight, q.straight);
+    // Pilot 2 recomputes the executed damping (a third of the shorter leg on its own distances, at most 10 m):
+    // shorter is fine, longer than ours by more than a few percent is a difference.
+    const stop = /Stop/.test(q.turnMode);
+    if (!stop && q.damping > p.damping * 1.02 + 0.011) note('turn damping LONGER than ours', i, p.damping, +q.damping.toFixed(2));
+    else if (!stop && q.damping < p.damping * 0.9) { counts['(turn damping shortened by Pilot 2)'] = (counts['(turn damping shortened by Pilot 2)'] ?? 3) + 1; }
+    if (!stop && p.straight !== q.straight) note('useStraightLine', i, p.straight, q.straight);
     const acts = (w: FileWaypoint) => w.groups.map(g => `${g.trigger}[${g.start}-${g.end}]:${g.actions.map(x => x.func + (x.params.recordPointCloudOperate ? '=' + x.params.recordPointCloudOperate : '')).join('+')}`);
     if (JSON.stringify(acts(p)) !== JSON.stringify(acts(q))) note('actions', i, acts(p), acts(q));
   });

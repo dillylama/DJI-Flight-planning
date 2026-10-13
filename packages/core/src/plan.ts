@@ -48,8 +48,8 @@ export const DEFAULTS: PlanOptions = {
   fig8MinRadiusM: 20,
   fig8PtsPerLoop: 12,
   alignStraightS: 12,
-  dampingFrac: 0.4,
-  dampingMaxM: 60,
+  dampingFrac: 1 / 3,      // Pilot 2 rewrites the executed damping to a third of the shorter leg, at most 10 m
+  dampingMaxM: 10,
 };
 
 export interface Line {

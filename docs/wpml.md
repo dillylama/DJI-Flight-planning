@@ -78,11 +78,35 @@ Only these spellings are verified. The writer refuses other return and scan mode
 `templateType mapping2d`, `caliFlightEnable 1`, `orthoLidarOverlapW 50 / H 75`, `orthoCameraOverlapW 68 / H 75`,
 `direction 157`, `shootType distance`, `efficiencyFlightModeEnable 0`.
 
+## What Pilot 2 does to an imported route (gate G1, 13 Oct 2026)
+`test-01` (132 waypoints, per-waypoint heights and speeds, straight legs, L3 actions) was imported into Pilot 2 on
+the RC, saved unchanged and exported again; `tools/compare-kmz.ts` compared the two.
+
+**Kept exactly:** every position, EGM96 height and ellipsoid height (0.000 m difference), every waypoint speed
+(3.62 to 10 m/s), turn modes, `useStraightLine 1` on all fly-through waypoints, `executeHeightMode WGS84` /
+`heightMode EGM96`, the L3 payload parameters, gimbal −90° + start recording on waypoint 1 and stop recording on
+the last. Pilot 2 shows the heights as "ASL (EGM96)" with the ellipsoidal height beside it, the waypoint type as
+"Turns before waypoint. Flies through", a speed range of 1–25 m/s, and the first and last as "Straight route.
+Aircraft stops". Its terrain check result is the same as ours (102.2 m over the DEM).
+
+**Changed by Pilot 2, and now written that way by us:**
+| We wrote | Pilot 2 wrote back | Now |
+|---|---|---|
+| turn damping up to 60 m (40 % of the shorter leg) | executed damping = ⅓ of the shorter leg, at most 10 m (template keeps the imported value) | `dampingFrac 1/3`, `dampingMaxM 10` |
+| `aircraftCalibration` before start and after stop | removed (waypoint routes have a route-level "IMU Calibration" switch = `caliFlightEnable`) | not written unless asked for |
+| `startActionGroup` (gimbal, focus) | removed | not written |
+| per line: `gimbalAngleLock`, `gimbalRotate` + `startContinuousShooting` on distance, stop + unlock | one `takePhoto` group per line on `multipleDistance`, same waypoint range | `takePhoto` on `multipleDistance` |
+| `useGlobalHeight/Speed/TurnParam 0` in template placemarks | flags omitted, values kept | flags omitted |
+| group ids 0…n in file order | arrival groups first (0, 1), then the rest | ours stay in file order; the checker only needs them unique |
+
+With those changes our `waylines.wpml` and the one Pilot 2 generates are the same in everything compared.
+Pilot 2 also shows a banner on routes that record point cloud: keep the gimbal at −90°, or ranging errors follow.
+
 ## Still to verify on the RC
-1. Pilot 2 imports our KMZ (`samples/generated/test-01-small-l3-survey.kmz`) and shows the L3 actions.
-2. Pilot 2 keeps the route as written: import `test-01`, save, export it again, then
-   `node tools/compare-kmz.ts samples/generated/test-01-small-l3-survey.kmz <re-export>.kmz --dem samples/generated/dem.tif`.
-3. Waypoint speeds above 15 m/s (`test-02` at 15, `test-03` at 17 m/s): accepted, or cut to 15?
+1. ~~Pilot 2 imports our KMZ and shows the L3 actions.~~ Done 13 Oct 2026.
+2. ~~Pilot 2 keeps the route as written.~~ Done 13 Oct 2026, see above.
+3. Waypoint speeds above 15 m/s (`test-02` at 15, `test-03` at 17 m/s): the editor's range is 1–25 m/s; confirm the values survive.
+3b. An export with Pilot 2's "IMU Calibration" switch on, to see what it writes for a waypoint route.
 4. The waypoint cap (`test-cap-0250` … `test-cap-5000`).
 5. In the simulator: the L3 starts recording on the approach waypoint, the calibration passes fly as expected,
    and the aircraft's path at fly-through waypoints stays close to the straight legs.

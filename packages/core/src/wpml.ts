@@ -7,7 +7,9 @@ import { TAKEOFF_DEFAULTS, type TakeoffOptions } from './takeoff.ts';
 import { fileDamping } from './validate.ts';
 
 // DJI WPML writer for the M400 + Zenmuse L3. Every element and value below is copied from real Pilot 2
-// exports (samples/m400-l3-waypoint-reference.kmz and samples/m400-l3-area-reference.kmz, WPML 1.0.6).
+// exports (samples/m400-l3-waypoint-reference.kmz and samples/m400-l3-area-reference.kmz, WPML 1.0.6), and
+// from what Pilot 2 wrote back after importing one of our routes (13 Oct 2026, docs/wpml.md): it kept every
+// position, height, speed and turn mode, and rewrote the actions into the forms used below.
 // Heights: template.kml carries EGM96 orthometric `height` + `ellipsoidHeight`; waylines.wpml executes in
 // WGS84 ellipsoidal heights. Pilot 2 uses the EGM96 grid that egm96-universal implements (matches to 0.1 mm).
 // Our DEM (GLO-30) is EGM2008: treating it as EGM96 costs < ~1–2 m, covered by the uncertainty allowance.
@@ -27,9 +29,13 @@ export interface WpmlOptions {
   takeoff?: Partial<TakeoffOptions>;
   payloadPositionIndex?: number;       // 0 = the default port (samples)
   lidar?: { samplingRate: number; returnMode: typeof L3_WPML.returnModes[number]; scanningMode: typeof L3_WPML.scanningModes[number]; modelColoring: boolean } | null;
-  djiImuCalibration?: boolean;         // DJI aircraftCalibration before startRecord and after stopRecord (as Pilot 2 does)
-  rgbPhotoSpacingM?: number | null;    // L3 RGB continuous shooting on data lines at this distance; null = off
-  gimbalStartGroup?: boolean;          // DJI start group: gimbal −90°, focus calibration, focus ∞ (as Pilot 2 does for L3)
+  // DJI aircraftCalibration before startRecord and after stopRecord, as in Pilot 2's L3 AREA routes. Pilot 2
+  // removes these actions when it imports a WAYPOINT route (it has a route-level "IMU Calibration" switch
+  // instead), so this is off unless asked for.
+  djiImuCalibration?: boolean;
+  rgbPhotoSpacingM?: number | null;    // L3 RGB photo every this many metres along each data line; null = off
+  gimbalStartGroup?: boolean;          // DJI start group of L3 area routes (gimbal, focus). Pilot 2 drops it from waypoint routes.
+  gimbalDown?: boolean;                // gimbal to −90° on the waypoint where recording starts (default: on with lidar)
   // true (default): useStraightLine 1 = straight legs, rounded over the turn damping distance at each waypoint.
   // This is what the legs' terrain clearance is computed for. false = useStraightLine 0 (fully curved path),
   // only kept to reproduce the Pilot 2 sample file.
@@ -52,6 +58,11 @@ const gimbalRotate = (i: number): Action => ({ func: 'gimbalRotate', params: [
   ['gimbalHeadingYawBase', 'aircraft'], ['gimbalRotateMode', 'absoluteAngle'], ['gimbalPitchRotateEnable', 1], ['gimbalPitchRotateAngle', -90],
   ['gimbalRollRotateEnable', 0], ['gimbalRollRotateAngle', 0], ['gimbalYawRotateEnable', 1], ['gimbalYawRotateAngle', 0],
   ['gimbalRotateTimeEnable', 0], ['gimbalRotateTime', 10], pp(i)] });
+// Gimbal straight down, in the form Pilot 2 writes on a waypoint.
+const gimbalDown = (i: number): Action => ({ func: 'gimbalRotate', params: [
+  ['gimbalRotateMode', 'absoluteAngle'], ['gimbalPitchRotateEnable', 1], ['gimbalPitchRotateAngle', -90],
+  ['gimbalRollRotateEnable', 0], ['gimbalRollRotateAngle', 0], ['gimbalYawRotateEnable', 0], ['gimbalYawRotateAngle', 0],
+  ['gimbalRotateTimeEnable', 0], ['gimbalRotateTime', 0], pp(i)] });
 const hover = (s: number): Action => ({ func: 'hover', params: [['hoverTime', s]] });
 const calibration = (heading: 0 | 1): Action => ({ func: 'aircraftCalibration', params: [['calibrationHeading', heading], ['calibrationTimes', 3], ['calibrationDistance', 30]] });
 const record = (op: 'startRecord' | 'stopRecord', i: number): Action => ({ func: 'recordPointCloud', params: [['recordPointCloudOperate', op], pp(i)] });
@@ -68,38 +79,33 @@ function actionXml(a: Action, id: number, ind: string): string {
 function buildGroups(route: Route<FlightWp>, o: { pos: number; djiImuCalibration: boolean; rgb: number | null; gimbalDown: boolean }): Map<number, Group[]> {
   const wps = route.wps, pos = o.pos;
   const span = new Map<number, Group[]>();     // waypoint → groups that run along the following legs
-  const rgbStop = new Set<number>();           // waypoints where a line's continuous shooting ends
   const onSpan = (i: number, g: Group) => { if (!span.has(i)) span.set(i, []); span.get(i)!.push(g); };
 
   if (o.rgb) {
-    // Each data line: lock the gimbal and shoot every `rgb` metres from the first line waypoint to the
-    // RUN-OUT waypoint, and stop there. The stop is an arrival action; keeping it off the data line means
-    // that if the aircraft slows for it, it does so outside the block.
+    // Each data line: a photo every `rgb` metres from the first line waypoint to the RUN-OUT waypoint, as one
+    // distance-triggered group. This is the form Pilot 2 keeps in a waypoint route (it turns continuous
+    // shooting into exactly this and drops gimbal lock and stop actions), and it needs no arrival action.
     const lines = new Map<number, number[]>();
     wps.forEach((w, i) => { if (w.role === 'line' && w.line != null) { if (!lines.has(w.line)) lines.set(w.line, []); lines.get(w.line)!.push(i); } });
     for (const idx of lines.values()) {
       const a = idx[0], last = idx[idx.length - 1];
       const b = last + 1 < wps.length && wps[last + 1].role === 'runout' ? last + 1 : last;
       if (b === a) continue;
-      onSpan(a, { start: a, end: b, trigger: 'betweenAdjacentPoints', actions: [{ func: 'gimbalAngleLock', params: [pp(pos)] }] });
       onSpan(a, { start: a, end: b, trigger: 'multipleDistance', triggerParam: o.rgb,
-        actions: [gimbalRotate(pos), { func: 'startContinuousShooting', params: [pp(pos), ['useGlobalPayloadLensIndex', 0]] }] });
-      rgbStop.add(b);
+        actions: [{ func: 'takePhoto', params: [pp(pos), ['useGlobalPayloadLensIndex', 0]] }] });
     }
   }
 
   const at = new Map<number, Group[]>();
   for (let i = 0; i < wps.length; i++) {
-    const start = wps[i].actions.includes('START_RECORD'), stop = wps[i].actions.includes('STOP_RECORD'), shot = rgbStop.has(i);
-    // Arrival actions in Pilot 2's order: (gimbal down, calibrate, start) … (stop record, stop shooting, calibrate, unlock).
+    const start = wps[i].actions.includes('START_RECORD'), stop = wps[i].actions.includes('STOP_RECORD');
+    // Arrival actions in Pilot 2's order: (gimbal down, calibrate, start record) … (stop record, calibrate).
     const reach: Action[] = [
-      ...(start && o.gimbalDown ? [gimbalRotate(pos)] : []),
+      ...(start && o.gimbalDown ? [gimbalDown(pos)] : []),
       ...(start && o.djiImuCalibration ? [calibration(0)] : []),
       ...(start ? [record('startRecord', pos)] : []),
       ...(stop ? [record('stopRecord', pos)] : []),
-      ...(shot ? [{ func: 'stopContinuousShooting', params: [pp(pos)] } as Action] : []),
       ...(stop && o.djiImuCalibration ? [calibration(1)] : []),
-      ...(shot ? [{ func: 'gimbalAngleUnlock', params: [] } as Action] : []),
     ];
     const g: Group[] = [];
     if (reach.length) g.push({ start: i, end: i, trigger: 'reachPoint', actions: reach });
@@ -177,7 +183,7 @@ export function writeWpml(route: Route<FlightWp>, opts: WpmlOptions = {}): WpmlF
     const d = Math.hypot(dist(wps[i].xy, wps[i - 1].xy), wps[i].h - wps[i - 1].h);
     distanceM += d; durationS += d / legSpeed(wps, i - 1);
   }
-  const groups = buildGroups(route, { pos, djiImuCalibration: opts.djiImuCalibration ?? false, rgb: opts.rgbPhotoSpacingM ?? null, gimbalDown: !!opts.gimbalStartGroup });
+  const groups = buildGroups(route, { pos, djiImuCalibration: opts.djiImuCalibration ?? false, rgb: opts.rgbPhotoSpacingM ?? null, gimbalDown: opts.gimbalDown ?? !!lidar });
   const now = opts.createTime ?? Date.now();
   // If a reader ever fell back to the global height, the whole route would be flown at the HIGHEST planned
   // height, which clears every leg.
@@ -198,15 +204,12 @@ export function writeWpml(route: Route<FlightWp>, opts: WpmlOptions = {}): WpmlF
         <wpml:index>${i}</wpml:index>
         <wpml:ellipsoidHeight>${f(ell[i])}</wpml:ellipsoidHeight>
         <wpml:height>${f(w.h)}</wpml:height>
-        <wpml:useGlobalHeight>0</wpml:useGlobalHeight>
-        <wpml:useGlobalSpeed>0</wpml:useGlobalSpeed>
         <wpml:waypointSpeed>${fDown(w.speed)}</wpml:waypointSpeed>
-        <wpml:useGlobalHeadingParam>1</wpml:useGlobalHeadingParam>
-        <wpml:useGlobalTurnParam>0</wpml:useGlobalTurnParam>
         <wpml:waypointTurnParam>
           <wpml:waypointTurnMode>${t.mode}</wpml:waypointTurnMode>
           <wpml:waypointTurnDampingDist>${fDown(t.damp)}</wpml:waypointTurnDampingDist>
         </wpml:waypointTurnParam>
+        <wpml:useGlobalHeadingParam>1</wpml:useGlobalHeadingParam>
         <wpml:useStraightLine>${straight}</wpml:useStraightLine>
 ${groupsXml(groups.get(i), tId, '        ')}        <wpml:isRisky>0</wpml:isRisky>
       </Placemark>`;
@@ -217,8 +220,7 @@ ${lidar ? `        <wpml:returnMode>${lidar.returnMode}</wpml:returnMode>
         <wpml:samplingRate>${lidar.samplingRate}</wpml:samplingRate>
         <wpml:scanningMode>${lidar.scanningMode}</wpml:scanningMode>
         <wpml:modelColoringEnable>${lidar.modelColoring ? 1 : 0}</wpml:modelColoringEnable>
-` : ''}        <wpml:photoSize/>
-      </wpml:payloadParam>`;
+` : '        <wpml:photoSize/>\n'}      </wpml:payloadParam>`;
   const templateKml = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:wpml="${WPML_NS}">
   <Document>
