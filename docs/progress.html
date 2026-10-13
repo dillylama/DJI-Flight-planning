@@ -72,7 +72,7 @@
 <div class="wrap">
 <header>
   <h1><span class="mark">3DM</span>M400 + Zenmuse L3 mission system</h1>
-  <span class="updated" id="updated">Updated 13 Oct 2026, 16:30 SAST</span>
+  <span class="updated" id="updated">Updated 13 Oct 2026, 17:15 SAST</span>
 </header>
 
 <div class="status-row">
@@ -80,10 +80,10 @@
   <div class="tile"><div class="k">Tests</div><div class="v">85</div><div class="s">core 70 + API 15, all passing</div></div>
   <div class="tile"><div class="k">Live planner</div><div class="v">Current</div><div class="s"><a href="https://planner.3dronemapping.com">planner.3dronemapping.com</a>, deployed 13 Oct</div></div>
   <div class="tile"><div class="k">Flights flown</div><div class="v">0</div><div class="s">nothing imported or flown yet</div></div>
-  <div class="tile"><div class="k">Next gate</div><div class="v">G2</div><div class="s">simulator bench test under way: first run reached waypoint 1</div></div>
+  <div class="tile"><div class="k">Next gate</div><div class="v">G3</div><div class="s">G1 and G2 passed 13 Oct; first live flight next</div></div>
 </div>
 
-<div class="banner"><b>Safety status:</b> the review's fixes and the independent file check are live on planner.3dronemapping.com since 13 Oct. The test files are on the RC and gate G1 (Pilot 2 import) is under way. Nothing has been flown, so how the aircraft handles these files is still unproven. Routes are for the gates only until G1 to G3 pass.</div>
+<div class="banner"><b>Safety status:</b> gates G1 (Pilot 2 import) and G2 (simulator) passed on 13 Oct. In the simulator the M400 flew a 132-waypoint route from our own app within 2 m of the file in position and height, held the climb and descent limits, started and stopped the L3, and came home when told. One question is open (which height reference the aircraft uses, see the gate below) and the first live flight is designed to answer it before anything else is flown.</div>
 
 <h2>What the review found</h2>
 <p>Every row is fixed and has a test that fails if the fault comes back.</p>
@@ -165,10 +165,10 @@
     </div>
   </div>
 
-  <div class="step now">
-    <div class="when"><b>Next</b>RC + M400, props off</div>
+  <div class="step">
+    <div class="when"><b>13 Oct</b>passed</div>
     <div>
-      <span class="pill luke">Luke</span> <span class="gate">GATE G2</span> <h3>Bench test in the DJI simulator</h3>
+      <span class="pill done">Passed</span> <span class="gate">GATE G2</span> <h3>Bench test in the DJI simulator</h3>
       <ul>
         <li>Run <b>test-01</b> in the simulator, started from the ground. Watch the height at waypoint 1, speed on the slowed legs, whether the aircraft stops or rounds at waypoints, and L3 recording on the approach point.</li>
         <li>Press RTH mid-line and pull the RC link once: does it climb to the RTH height that was set?</li>
@@ -180,13 +180,15 @@
         <br>• The simulator places the aircraft at 100 m above sea level wherever it is, so real-height routes need a simulator-only copy with lowered heights.
         <br>• Height reached at waypoint 1: 372.5 m, against 373.6 m expected. So the aircraft turns our ellipsoidal heights into heights above sea level the same way we do, within about a metre.
         <br>• It climbed to the first waypoint at about 8 m/s.
-        <br>• The run ended 12 seconds into the IMU calibration passes: the aircraft battery was at 14 %, and it returned home and landed by itself. Recording had not started yet. To repeat on charged batteries.</div>
+        <br>• The run ended 12 seconds into the IMU calibration passes: the aircraft battery was at 14 %, and it returned home and landed by itself.</div>
+      <div class="pass"><b>13 Oct, second session, full route (20 min):</b> every waypoint passed within 2.3 m; height within 2.1 m of the file everywhere and never more than 2.2 m below a leg; slowed legs at the file's speeds; climb 3.5 m/s sustained (4.4 for a moment), descent up to 3.2 m/s; near stop-and-turn at line ends; recording started after the calibration passes and stopped on the last waypoint; home at the end at its current height. <b>RTH pressed mid-route:</b> route ended, L3 stopped by the aircraft within a second, home at 8 m/s.
+        <br><b>Open question:</b> in two runs the aircraft flew to our heights read as ellipsoidal, in one run 32 m lower (read as above sea level), same file. Probably a simulator artefact (it mixes a fake position with the real RTK receiver), but the first live flight is built to settle it: at waypoint 1 the RC must show the planner's "height at WP 1" within 10 m. About 30 m higher means the aircraft reads heights as ellipsoidal; stop, and the writer gets changed before anything else is flown.</div>
       <div class="pass"><b>Pass:</b> the route runs to the end never more than a few metres below the planned legs, vertical rates within limits, RTH at the set height, recording controlled as planned.</div>
     </div>
   </div>
 
-  <div class="step">
-    <div class="when"><b>After G2</b>first live flight</div>
+  <div class="step now">
+    <div class="when"><b>Next</b>first live flight</div>
     <div>
       <span class="pill luke">Luke</span> <span class="gate">GATE G3</span> <h3>Small, flat, high, in sight, RTK fixed</h3>
       <ul>
@@ -261,7 +263,7 @@
   <div class="card">
     <h3>Needs Luke</h3>
     <ul>
-      <li>G2: simulator bench test with the RC and the M400, props off.</li>
+      <li>G3: the first live flight, flat open ground, planned with the deployed planner, home set, RTK fixed.</li>
       <li>If the RC firmware is updated: re-export test-01 once afterwards, to check Pilot 2 still writes routes the same way.</li>
       <li>Decide: on signal loss, return home (as now) or continue the route? "Continue" needs a Pilot 2 export with that option, to copy its exact spelling.</li>
       <li>Two more Pilot 2 exports would remove guesswork: a waypoint route with a speed and height change and an action on one waypoint, and an L3 area route with terrain follow on.</li>
@@ -293,6 +295,7 @@
 
 <h2>Change log</h2>
 <div class="log">
+  <p><span class="d">13 Oct 17:15</span> Gate G2 passed: full route in the simulator within 2 m of the file, limits held, L3 started and stopped, RTH mid-route handled. One open question on the height reference, to be settled by the waypoint-1 check on the first live flight.</p>
   <p><span class="d">13 Oct 16:30</span> G2 started with our own test app. Route uploaded and started in the simulator; height at waypoint 1 within about 1 m of plan; Max Altitude check and low-battery return seen. Stopped by a low aircraft battery; full run still to do.</p>
   <p><span class="d">13 Oct 15:31</span> Round trip confirmed: a file from the new writer (test-01b, IMU calibration on) went through Pilot 2 and came back with no differences.</p>
   <p><span class="d">13 Oct 14:52</span> Gate G1 passed. Waypoint cap found (1,040 opens, 2,013 crashes Pilot 2); planner cuts sorties at 1,000. IMU calibration written as Pilot 2's switch writes it. All of it live.</p>
