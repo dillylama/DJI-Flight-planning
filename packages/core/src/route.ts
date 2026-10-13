@@ -117,14 +117,27 @@ export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true, fig
   end.actions.push('STOP_RECORD');
   if (transit) { end.stop = true; end.speed = transit.speedMs; ferry(end.xy, transit.home, false); }
 
-  // Damping per waypoint: fraction of the shorter adjacent leg (DJI requires < leg length).
+  // Damping per waypoint. Where the heading changes, the turn radius at turnBankDeg for the speed flown into
+  // the waypoint, so the aircraft can round the corner at speed (it passes r·(sec(θ/2) − 1) inside it, 0.41 r
+  // for a right angle); on a straight run just enough to fly through. Never more than dampingFrac of the
+  // shorter adjacent leg, which keeps the two dampings on any leg inside it (DJI requires that), or dampingMaxM.
+  // applyHeights shortens it again where the vertical rounding or the terrain corridor needs it.
   const out: RouteWp[] = wps.map(({ stop, ...w }, i) => {
     const legs: number[] = [];
     if (i > 0) legs.push(dist(w.xy, wps[i - 1].xy));
     if (i < wps.length - 1) legs.push(dist(w.xy, wps[i + 1].xy));
+    let want = 10;
+    if (i > 0 && i < wps.length - 1) {
+      const ax = w.xy[0] - wps[i - 1].xy[0], ay = w.xy[1] - wps[i - 1].xy[1], bx = wps[i + 1].xy[0] - w.xy[0], by = wps[i + 1].xy[1] - w.xy[1];
+      const theta = Math.abs(Math.atan2(ax * by - ay * bx, ax * bx + ay * by));
+      if (theta > 5 * D2R) {
+        const vIn = wps[i - 1].speed, r = (vIn * vIn) / (G * Math.tan(o.turnBankDeg * D2R));
+        want = Math.max(10, r * Math.tan(Math.min(theta, Math.PI / 2) / 2));
+      }
+    }
     return {
       ...w,
-      dampingM: stop ? 0 : Math.min(o.dampingMaxM, o.dampingFrac * Math.min(...legs)),
+      dampingM: stop ? 0 : Math.min(o.dampingMaxM, o.dampingFrac * Math.min(...legs), want),
       turnMode: stop ? STOP_TURN : 'toPointAndPassWithContinuityCurvature',
     };
   });

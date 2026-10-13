@@ -22,8 +22,12 @@ export interface PlanOptions {
   fig8MinRadiusM: number;  // floor for the computed radius, so a slow route still gets a flyable figure-8
   fig8PtsPerLoop: number;
   alignStraightS: number;  // straight level flight before the first figure-8 and after the last one, in seconds (≥ 2.5 radii)
-  dampingFrac: number;     // damping distance as fraction of the shorter adjacent leg
-  dampingMaxM: number;
+  dampingFrac: number;     // damping distance as fraction of the shorter adjacent leg (DJI needs the two on a leg to fit in it)
+  dampingMaxM: number;     // cap on the damping at a turn
+  // At a turn the damping is set from speed and bank so the aircraft can fly through it as a coordinated turn
+  // instead of slowing to a near stop: d = v² / (g·tan bank), the turn radius at that bank. Pilot 2 cuts the
+  // executed damping to 10 m when it imports a route; a route pushed from 3DM Fly flies this value.
+  turnBankDeg: number;
 }
 
 export const DEFAULTS: PlanOptions = {
@@ -48,8 +52,9 @@ export const DEFAULTS: PlanOptions = {
   fig8MinRadiusM: 20,
   fig8PtsPerLoop: 12,
   alignStraightS: 12,
-  dampingFrac: 1 / 3,      // Pilot 2 rewrites the executed damping to a third of the shorter leg, at most 10 m
-  dampingMaxM: 10,
+  dampingFrac: 1 / 3,      // the most a damping may take of the shorter adjacent leg (Pilot 2's own rule)
+  dampingMaxM: 60,
+  turnBankDeg: 20,
 };
 
 export interface Line {
@@ -87,6 +92,7 @@ function checkInputs(poly: LonLat[], o: PlanOptions): void {
   if (!(o.fovDeg >= 1 && o.fovDeg <= 150)) bad('fovDeg must be between 1° and 150°.');
   if (!(o.sidelapPct >= 0 && o.sidelapPct <= 90)) bad('sidelapPct must be between 0 and 90 %.');
   if (!(o.fig8BankDeg >= 5 && o.fig8BankDeg <= 45)) bad('fig8BankDeg must be between 5° and 45°.');
+  if (!(o.turnBankDeg >= 5 && o.turnBankDeg <= 45)) bad('turnBankDeg must be between 5° and 45°.');
   if (!(o.dampingFrac > 0 && o.dampingFrac < 0.5)) bad('dampingFrac must be above 0 and below 0.5 (two dampings must fit in a leg).');
   if (o.fig8RadiusM != null && !(o.fig8RadiusM >= 5)) bad('fig8RadiusM must be at least 5 m.');
   if (!Number.isInteger(o.fig8PtsPerLoop)) bad('fig8PtsPerLoop must be a whole number.');
