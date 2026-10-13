@@ -325,9 +325,10 @@ export function verifyRouteFiles(templateKml: string, waylinesWpml: string, opts
       if (!(Math.abs(a.hEllipsoid - b.hEllipsoid) <= 1e-4)) { bad(i, `ellipsoid height ${a.hEllipsoid} vs ${b.hEllipsoid}`); break; }
       if (!(Math.abs(egm96ToEllipsoid(a.lat, a.lon, a.hEgm96) - a.hEllipsoid) <= 0.01)) { bad(i, `EGM96 height ${a.hEgm96} does not match its ellipsoid height ${a.hEllipsoid}`); break; }
       if (a.speed !== b.speed) { bad(i, `speed ${a.speed} vs ${b.speed}`); break; }
-      // Pilot 2 keeps the template's damping and shortens the executed one; longer than the template is wrong.
+      // Pilot 2 keeps the template's damping and recomputes the executed one on its own leg lengths (which run
+      // about 0.4 % longer than ours): shorter, or longer by a rounding, is its normal output. More is wrong.
       const stopEnd = STOP_MODES.includes(b.turnMode);
-      if (a.turnMode !== b.turnMode || !(b.damping <= a.damping + 1e-6 || stopEnd) || (!stopEnd && a.straight !== b.straight)) { bad(i, 'turn settings'); break; }
+      if (a.turnMode !== b.turnMode || !(b.damping <= a.damping * 1.02 + 0.02 || stopEnd) || (!stopEnd && a.straight !== b.straight)) { bad(i, 'turn settings'); break; }
       // With the template's IMU calibration switch on, the calibration actions exist in waylines.wpml only.
       const acts = (p: FileWaypoint, skipCali: boolean) => JSON.stringify(p.groups.map(g => [g.start, g.end, g.trigger, g.triggerParam, g.actions.filter(x => !(skipCali && x.func === 'aircraftCalibration'))]));
       if (acts(a, false) !== acts(b, t.caliFlight === 1)) { bad(i, 'actions'); break; }
