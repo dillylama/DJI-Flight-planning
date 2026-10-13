@@ -36,8 +36,9 @@ the straight legs. Pilot 2's own L3 area route flies `useStraightLine 1` with st
 **Corners between lines are `coordinateTurn`** (13 Oct 2026, M400 simulator): with 20 m damping on a 10 m/s route
 the aircraft flew the 90° corners at 6–7 m/s, passing 4–6 m inside the corner. The fly-through mode slowed to about
 3 m/s and pivoted at the corner, with 10 m or 20 m damping alike. Damping at a corner is the turn radius at
-`turnBankDeg` (20°) for the speed flown in, held to a third of the shorter adjacent leg and 60 m. Whether Pilot 2
-keeps `coordinateTurn` on import is not yet checked (next RC session: import a planner route and re-export it).
+`turnBankDeg` (20°) for the speed flown in, held to a third of the shorter adjacent leg and 60 m. Pilot 2 keeps
+`coordinateTurn` and its damping on import (`test-01c`, 13 Oct 2026: imported, saved, exported, no differences in
+either file; the 23 m corner damping survived, where fly-through waypoints had been cut to 10 m).
 
 **Our routes write `useStraightLine 1`** on every waypoint and in `globalUseStraightLine`: straight legs,
 rounded over the turn damping distance at each fly-through waypoint (DJI requires the damping for that

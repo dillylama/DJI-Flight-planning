@@ -84,6 +84,8 @@ DEM clip (AOI + buffer), offline basemap tiles.
   record start/stop; it shortens executed damping to ⅓ leg ≤ 10 m, drops aircraftCalibration and the start group,
   and turns continuous shooting into takePhoto on distance. The writer now writes exactly that.
 - Waypoint cap: 1,040 opened in Pilot 2, 2,013 crashed it → planner cuts sorties at 1,000 (`M400_LIMITS.maxWaypoints`).
+- Corners between lines are DJI `coordinateTurn` (M400 simulator: 6–7 m/s through a 90° corner at 10 m/s, 4–6 m
+  inside it; fly-through pivoted at ~3 m/s). Pilot 2 keeps the mode and its damping on import (test-01c round trip).
 - G2 passed 13 Oct 2026 in the simulator from our app (apps/rc/README.md, docs/safety.md §5a): within 2 m of
   the file, limits held, L3 start/stop, RTH mid-route. Open: height reference (ellipsoidal vs EGM96 reading,
   32 m) → the waypoint-1 check on the first live flight decides; upload of ~1,000 waypoints to the aircraft.
