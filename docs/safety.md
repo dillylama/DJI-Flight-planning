@@ -119,6 +119,29 @@ RTH is unchanged: a straight line at the RTH height, checked from every point of
   any other block is loaded.
 - Projected (UTM) and rotated GeoTIFFs are refused.
 
+## 5a. What the simulator showed (13 Oct 2026, gate G2)
+
+The M400 flew `test-01b` (132 waypoints, lowered by a constant for the simulator) from our own app in DJI's
+simulator, props off, with the flight data logged twice a second:
+
+- every waypoint passed within 2.3 m; height within 2.1 m of the file at every waypoint and never more than 2.2 m
+  below a straight leg (budgeted: 5 m);
+- slowed legs flown at or just under the file's speeds; climb up to 4.4 m/s for a moment and 3.5 m/s sustained,
+  descent up to 3.2 m/s, against the 4 / 3 m/s the plan assumes;
+- near stop-and-turn at every line end (Pilot 2's 10 m damping), at the planned height;
+- recording starts after the calibration passes on waypoint 1 and stops on the last waypoint; the aircraft
+  refuses a route above its Max Altitude before take-off; it returns home when the route ends, and when RTH is
+  pressed it ends the route, stops the recording itself and flies home at its current height (above the RTH setting).
+
+**Open: which height the aircraft flies to.** In two of three runs it held `executeHeight` (ellipsoidal) above
+the simulator's take-off altitude, in one run the EGM96 height, 32 m lower, with the same file. The simulator mixes
+a made-up position with real receiver data, so this may be its artefact. Where the geoid is above the ellipsoid
+(South Africa, N ≈ +30 m) an aircraft that ignored the geoid would fly HIGH, never low; where N is negative it
+would fly low. The first live flight settles it: at waypoint 1 the RC must show the planner's "height at WP 1"
+within 10 m, and the planner's figure assumes the EGM96 reading. If the aircraft is about 30 m higher than that
+figure, it is using the ellipsoidal reading; stop, and the writer will be changed to match before anything else is
+flown.
+
 ## 6. What none of this covers
 
 1. **Obstacles that are not in the DEM**: masts, power lines, cranes, turbines, new buildings, trees
@@ -142,7 +165,7 @@ Items 4 and 5 are what the gates are for.
 |---|---|---|
 | (any time) | Optional second opinion: export the UgCS CSV and look at the route over UgCS's own terrain |  Clearance looks the same in software that shares nothing with this planner |
 | G1 | Import the test files into Pilot 2; save and re-export `test-01`; `tools/compare-kmz.ts` | Heights within 0.1 m, speeds, damping, `useStraightLine`, actions unchanged; cap known |
-| G2 | DJI simulator, props off: full route, RTH mid-line, RC loss | Never more than a few metres below the straight-leg profile; rates within limits; RTH at the set height; L3 records |
+| G2 | DJI simulator, props off: full route, RTH mid-line | **Passed 13 Oct 2026** (section 5a). RC loss not simulated. |
 | G3 | Live, flat open ground, ≥ 150 m AGL, RTK fixed | Height at waypoint 1 matches the planner within ~10 m; L3 range to ground within 5 m of plan |
 | G4 | Live, real slopes, planned 100 m higher than the job needs | Measured AGL never below plan − 10 m; no leg at the speed floor |
 | Job | Step down only if G4 held | Obstacle survey done; never below 100 m AGL on GLO-30 |

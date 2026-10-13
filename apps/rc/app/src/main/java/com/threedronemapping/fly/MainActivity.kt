@@ -399,6 +399,7 @@ class MainActivity : Activity() {
         tvSimEnabled = Ui.kv(s6, "Simulator enabled")
         tvSimState = Ui.kv(s6, "State")
         Ui.buttons(s6, "Enable simulator" to { enableSimulator() }, "Disable simulator" to { disableSimulator() })
+        Ui.buttons(s6, "Confirm landing" to { confirmLanding() })
 
         // 7 Probe
         val s7 = Ui.section(left, "7", "Pilot 2 storage probe (read-only)",
@@ -850,6 +851,18 @@ class MainActivity : Activity() {
 
     // =====================================================================================
     // 6 Simulator
+
+    // DJI asks for a landing confirmation below about 0.7 m (in the simulator the aircraft hovers there and the RC
+    // beeps until it gets one). Pilot 2 shows a dialog for it; here it is a button.
+    private fun confirmLanding() {
+        Phase0Log.i("SIM", "confirmLanding …")
+        safe("SIM", "confirmLanding") {
+            KeyManager.getInstance().performAction(KeyTools.createKey(FlightControllerKey.KeyConfirmLanding), object : CommonCallbacks.CompletionCallbackWithParam<EmptyMsg> {
+                override fun onSuccess(t: EmptyMsg?) { Phase0Log.i("SIM", "confirmLanding SUCCESS") }
+                override fun onFailure(error: IDJIError) { Phase0Log.e("SIM", "confirmLanding FAIL ${error.fmt()}") }
+            })
+        }
+    }
 
     private fun enableSimulator() {
         val lat = etSimLat.text.toString().trim().toDoubleOrNull()

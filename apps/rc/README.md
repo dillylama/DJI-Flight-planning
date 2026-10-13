@@ -87,6 +87,18 @@ state (DJI release notes). Only one app can hold the aircraft link at a time.
   against 373.6 m expected from our EGM96 conversion, then the first arrival actions.
 - **Start now does nothing unless the simulator is on.** Flight data (position, height, velocity, waypoint, record
   status) is logged twice a second while the motors run: `adb logcat -s 3DMFlyFD`.
+- **Full route in the simulator (run 2, 20 min, 132 waypoints):** every waypoint passed within 2.3 m; height within
+  2.1 m of the file at every waypoint and never more than 2.2 m below a straight leg; slowed legs flown at or just
+  under the file's speeds; climb ≤ 4.4 m/s (3.5 sustained), descent ≤ 3.2 m/s; near stop-and-turn at line ends
+  (10 m damping); photo action every 25 m on the lines; recording started after the calibration passes on waypoint 1
+  and stopped on the last; `finishAction goHome` flew home at 16.6 m/s keeping its current height (above the RTH
+  setting). `tools/compare-flight.ts` does this comparison from the `3DMFlyFD` log.
+- **RTH pressed mid-route (run 3):** the mission ends (`FINISHED`), the L3 recording is stopped by the aircraft
+  within a second, and it flies home at 8 m/s at its current height.
+- **Height reference:** runs 2 and 3 held `executeHeight` (ellipsoidal) minus the simulator's 100 m take-off
+  altitude (−1.4 m); run 1 held 32 m less, i.e. the EGM96 height minus 100 m. Same file, same simulator position.
+  Not explained; the real-flight check "height at waypoint 1 matches the planner" covers it (docs/safety.md).
+- The simulated landing hovers at 0.5 m and the RC beeps until the landing is confirmed: **Confirm landing** button.
 - The simulator position is remembered between launches. Text entry on the RC keyboard can stick; the values can be
   set from the PC by writing the app's `shared_prefs/MainActivity.xml` with `run-as`.
 

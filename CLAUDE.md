@@ -84,7 +84,9 @@ DEM clip (AOI + buffer), offline basemap tiles.
   record start/stop; it shortens executed damping to ⅓ leg ≤ 10 m, drops aircraftCalibration and the start group,
   and turns continuous shooting into takePhoto on distance. The writer now writes exactly that.
 - Waypoint cap: 1,040 opened in Pilot 2, 2,013 crashed it → planner cuts sorties at 1,000 (`M400_LIMITS.maxWaypoints`).
-- Still open: upload of ~1,000 waypoints to the aircraft
+- G2 passed 13 Oct 2026 in the simulator from our app (apps/rc/README.md, docs/safety.md §5a): within 2 m of
+  the file, limits held, L3 start/stop, RTH mid-route. Open: height reference (ellipsoidal vs EGM96 reading,
+  32 m) → the waypoint-1 check on the first live flight decides; upload of ~1,000 waypoints to the aircraft.
   (samples/generated/test-cap-*.kmz), actions in Pilot 2 waypoint UI, fly-through rounding with useStraightLine 1.
 - The route file carries neither RTH height nor Max Altitude: the planner shows both per sortie, tags the file
   name (`_RTH330_ALT430`) and makes the pilot confirm them at export.
