@@ -72,15 +72,15 @@
 <div class="wrap">
 <header>
   <h1><span class="mark">3DM</span>M400 + Zenmuse L3 mission system</h1>
-  <span class="updated" id="updated">Updated 3 Oct 2026, 15:13 SAST</span>
+  <span class="updated" id="updated">Updated 13 Oct 2026, 14:08 SAST</span>
 </header>
 
 <div class="status-row">
-  <div class="tile"><div class="k">Build</div><div class="v">8 + 1</div><div class="s">8 merged, <a href="https://github.com/dillylama/DJI-Flight-planning/pull/9">PR 9</a> waiting for review</div></div>
-  <div class="tile"><div class="k">Tests</div><div class="v">79</div><div class="s">core 64 + API 15, all passing</div></div>
+  <div class="tile"><div class="k">Build</div><div class="v">8 + 2</div><div class="s">8 merged; <a href="https://github.com/dillylama/DJI-Flight-planning/pull/9">PR 9</a> and <a href="https://github.com/dillylama/DJI-Flight-planning/pull/10">PR 10</a> waiting for review</div></div>
+  <div class="tile"><div class="k">Tests</div><div class="v">85</div><div class="s">core 70 + API 15, all passing</div></div>
   <div class="tile"><div class="k">Live planner</div><div class="v">Old</div><div class="s">still the 25 Sep version until PR 9 is merged and deployed</div></div>
   <div class="tile"><div class="k">Flights flown</div><div class="v">0</div><div class="s">nothing imported or flown yet</div></div>
-  <div class="tile"><div class="k">Next gate</div><div class="v">G1</div><div class="s">Pilot 2 import, Tue 6 Oct</div></div>
+  <div class="tile"><div class="k">Next gate</div><div class="v">G1</div><div class="s">Pilot 2 import, not done yet</div></div>
 </div>
 
 <div class="banner"><b>Safety status:</b> the review is finished. It found faults in the 25 Sep planner that could put a route below terrain. All are fixed in PR 9, which also adds an independent check of every exported file. PR 9 is <b>not merged or deployed</b>: do not export a route from planner.3dronemapping.com until it is. No route has been imported into Pilot 2 or flown, so everything about how the aircraft handles these files is still unproven.</div>
@@ -133,8 +133,22 @@
     </div>
   </div>
 
+  <div class="step">
+    <div class="when"><b>13 Oct</b>done, in PR 10</div>
+    <div>
+      <span class="pill done">Done</span> <h3>Three ideas from UgCS 6.1</h3>
+      <ul>
+        <li><b>Terrain-following transit</b> (option, off by default): the way out and back become waypoints of the route, with heights from the DEM like every other leg. On the test block the direct transit hit a ridge by 80 m; with this on, all three sorties passed the file check at 150 m.</li>
+        <li><b>Sensor profiles:</b> L3, L2, L1 or your own (name, field of view, pulse rate). Line spacing follows the field of view. Route files are still L3 only.</li>
+        <li><b>UgCS CSV export:</b> the same route as a file UgCS imports, to look at terrain clearance over UgCS's own elevation data as a second opinion.</li>
+        <li>LiDAR settings in the route were already there for the values seen in a Pilot 2 export. Other L3 return and scan modes need an export that shows how Pilot 2 spells them.</li>
+      </ul>
+      <div class="pass"><b>Not tried on hardware:</b> a route that ends above home, and stopping mid-route at the approach and exit points. Simulator first (G2).</div>
+    </div>
+  </div>
+
   <div class="step now">
-    <div class="when"><b>Tue 6 Oct</b>needs the RC</div>
+    <div class="when"><b>Next</b>needs the RC</div>
     <div>
       <span class="pill luke">Luke</span> <span class="gate">GATE G1</span> <h3>Pilot 2 import test (no aircraft, no props)</h3>
       <ul>
@@ -238,7 +252,8 @@
     <h3>Needs Luke</h3>
     <ul>
       <li>Review and merge <a href="https://github.com/dillylama/DJI-Flight-planning/pull/9">PR 9</a>, then deploy, so the live planner has the fixes.</li>
-      <li>G1 on Tuesday: import, re-export test-01, speeds, waypoint cap.</li>
+      <li>G1: import, re-export test-01, speeds, waypoint cap.</li>
+      <li>Review <a href="https://github.com/dillylama/DJI-Flight-planning/pull/10">PR 10</a> (it sits on top of PR 9).</li>
       <li>Decide: on signal loss, return home (as now) or continue the route? "Continue" needs a Pilot 2 export with that option, to copy its exact spelling.</li>
       <li>Two more Pilot 2 exports would remove guesswork: a waypoint route with a speed and height change and an action on one waypoint, and an L3 area route with terrain follow on.</li>
       <li>Decide on Cloudflare Access (email sign-in) for the office side of the planner.</li>
@@ -269,6 +284,7 @@
 
 <h2>Change log</h2>
 <div class="log">
+  <p><span class="d">13 Oct 14:08</span> PR 10: terrain-following transit, sensor profiles, UgCS CSV export. Mutation check now 21 of 21. G1 still to do; PR 9 still not merged, so the live planner is still the 25 Sep version.</p>
   <p><span class="d">3 Oct 15:13</span> Safety review finished and acted on (PR 9). Import test files regenerated in <span class="m">C:\Claude\M400\samples\generated\</span>, each one passed the file check. Gates rewritten: G1 now includes the Pilot 2 re-export comparison.</p>
   <p><span class="d">25 Sep 13:40</span> Page created. PR 8 merged and deployed: terrain-following speed limiter, figure-8 at both ends, overlap bands. Safety review started.</p>
   <p><span class="d">25 Sep</span> Sync server and planner deployed to Cloudflare; planner.3dronemapping.com live. Route-file writer built from the Pilot 2 samples. Sortie splitting.</p>
