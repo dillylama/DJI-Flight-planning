@@ -100,6 +100,8 @@ Aircraft stops". Its terrain check result is the same as ours (102.2 m over the 
 | group ids 0…n in file order | arrival groups first (0, 1), then the rest | ours stay in file order; the checker only needs them unique |
 
 With those changes our `waylines.wpml` and the one Pilot 2 generates are the same in everything compared.
+Confirmed on 13 Oct 2026 with a file from the new writer (`test-01b`, IMU calibration on): imported, saved, exported,
+and `tools/compare-kmz.ts` reports no differences in either file.
 Pilot 2 also shows a banner on routes that record point cloud: keep the gimbal at −90°, or ranging errors follow.
 
 ## Still to verify on the RC
