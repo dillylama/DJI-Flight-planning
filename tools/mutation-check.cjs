@@ -27,7 +27,7 @@ const mutations = [
   ['M18 heights 1 m low in waylines only', 'src/wpml.ts', '<wpml:executeHeight>${f(ell[i])}</wpml:executeHeight>', '<wpml:executeHeight>${f(ell[i] - 1)}</wpml:executeHeight>'],
   ['M19 transit clearance ignored', 'src/heights.ts', 'Math.max(o.aglM, wps[i].aglM ?? 0)', 'o.aglM'],
   ['M20 level groups counted from the route start, transit included', 'src/heights.ts', "while (s0 < n && wps[s0].role === 'transit') s0++;", ''],
-  ['M21 recording actions left on fly-through waypoints', 'src/route.ts', "turnMode: stop ? STOP_TURN : 'toPointAndPassWithContinuityCurvature'", "turnMode: 'toPointAndPassWithContinuityCurvature'"],
+  ['M21 recording actions left on fly-through waypoints', 'src/route.ts', "turnMode: stop ? STOP_TURN : corner ? 'coordinateTurn' : 'toPointAndPassWithContinuityCurvature'", "turnMode: corner ? 'coordinateTurn' : 'toPointAndPassWithContinuityCurvature'"],
 ];
 
 const run = () => spawnSync(process.execPath, ['--test', 'test/**/*.test.ts'], { cwd: core, encoding: 'utf8', timeout: 240000 });
