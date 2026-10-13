@@ -78,7 +78,8 @@ test('slow mode: never faster than a leg allows, however the aircraft changes sp
 test('turn rounding stays inside the terrain corridor; rounding and pull-up lag are bounded and recorded', () => {
   const hills = (lon: number, lat: number) => { const x = (lon - lon0) / m * k, y = (lat - lat0) / m; return 300 + 150 * Math.sin(x / 200) * Math.cos(y / 260); };
   for (const corridorM of [30, 75]) {
-    const plan = planLines(poly, { aglM: 150, speedMs: 17, corridorM });
+    // long turn damping (as before Pilot 2's 10 m cap was adopted), so that the corridor is what limits it
+    const plan = planLines(poly, { aglM: 150, speedMs: 17, corridorM, dampingFrac: 0.4, dampingMaxM: 60 });
     const f = applyHeights(plan, buildRoute(plan), hills);
     const n = f.wps.length;
     assert.ok(f.wps.every(w => w.turnM <= 0.9 * corridorM + 1e-9), `corridor ${corridorM}: turn rounding within 90 % of the corridor`);
@@ -96,6 +97,8 @@ test('turn rounding stays inside the terrain corridor; rounding and pull-up lag 
   // level ground: nothing to round vertically and nothing to lag behind
   const plan = planLines(poly, { aglM: 150 });
   const flat = applyHeights(plan, buildRoute(plan), () => 100);
+  // default damping is Pilot 2's own rule: a third of the shorter leg, at most 10 m
+  assert.ok(flat.wps.every(w => w.dampingM <= 10 + 1e-9) && flat.wps.some(w => Math.abs(w.dampingM - 10) < 1e-9));
   assert.ok(flat.wps.every(w => w.roundingM === 0 && w.lagM === 0));
   const b = clearanceBudget(plan, flat, 20);
   assert.deepEqual([b.aglM, b.pathM, b.uncertaintyM, b.worstCaseM], [150, 0, 20, 130]);

@@ -20,3 +20,5 @@ samples/extracted/
 samples/generated/
 deploy/planner/dist/
 samples/*.tif
+samples/*
+!samples/README.md

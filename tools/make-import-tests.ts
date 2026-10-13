@@ -1,8 +1,9 @@
 // Generates RC import-test KMZs (IMPORT / SIMULATOR ONLY, DO NOT FLY) near the Pilot 2 sample site.
 //   node tools/make-import-tests.ts            (needs VITE_OPENTOPO_KEY in apps/web/.env.development.local)
+//   node tools/make-import-tests.ts --keep-dem reuses samples/generated/dem.tif instead of fetching it again
 // Output: samples/generated/*.kmz + dem.tif + README.md describing each file. Every file is read back and
 // checked by the independent verifier before it is written; a file that fails is not written at all.
-import { mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import {
   planLines, buildRoute, applyHeights, readGeoTiff, rasterElev, bufferedBbox, openTopoUrl, writeWpml, writeKmz,
   validate, safetyChecks, clearanceBudget, verifyRouteFiles,
@@ -23,11 +24,16 @@ const rect = (w: number, h: number): LonLat[] => [P(-w / 2, -h / 2), P(w / 2, -h
 
 const out = new URL('samples/generated/', root);
 mkdirSync(out, { recursive: true });
-for (const f of readdirSync(out)) if (/\.(kmz|tif)$/i.test(f) || f === 'README.md') unlinkSync(new URL(f, out));   // no stale files from an older writer
+const keepDem = process.argv.includes('--keep-dem') && existsSync(new URL('dem.tif', out));
+for (const f of readdirSync(out)) if (/\.kmz$/i.test(f) || (!keepDem && /\.tif$/i.test(f)) || f === 'README.md') unlinkSync(new URL(f, out));   // no stale files from an older writer
 
-const res = await fetch(openTopoUrl(bufferedBbox(rect(6000, 6000), 2500), key, 'COP30'));
-if (!res.ok) throw new Error('OpenTopography ' + res.status);
-const demBuf = await res.arrayBuffer();
+let demBuf: ArrayBuffer;
+if (keepDem) { const b = readFileSync(new URL('dem.tif', out)); demBuf = b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer; }
+else {
+  const res = await fetch(openTopoUrl(bufferedBbox(rect(6000, 6000), 2500), key, 'COP30'));
+  if (!res.ok) throw new Error('OpenTopography ' + res.status);
+  demBuf = await res.arrayBuffer();
+}
 const elev = rasterElev(await readGeoTiff(demBuf));
 writeFileSync(new URL('dem.tif', out), new Uint8Array(demBuf));   // the terrain these files were checked against
 
@@ -40,7 +46,7 @@ async function emit(name: string, poly: LonLat[], o: Partial<PlanOptions>, note:
   if (problems.length) throw new Error(`${name}: ${problems.map(i => i.message).join(' | ')}`);
   const files = writeWpml(route, {
     takeoff: { flyToMode: 'safely', takeoffSecurityM: 60, transitSpeedMs: 15 },
-    lidar: L3, djiImuCalibration: true, rgbPhotoSpacingM: 25, gimbalStartGroup: true,
+    lidar: L3, rgbPhotoSpacingM: 25,     // as the planner exports: no calibration actions, no start group
   });
   const rep: VerifyReport = verifyRouteFiles(files.templateKml, files.waylinesWpml, {
     elev, aglM: plan.o.aglM, corridorM: plan.o.corridorM, maxClimbMs: plan.o.climbMs, maxDescentMs: plan.o.descentMs, maxSpeedMs: 20, lidar: true,
@@ -96,7 +102,7 @@ ${rows.join('\n')}
    - the speed it shows, and whether the legs between waypoints are drawn straight. The route's global speed is
      deliberately the SLOWEST waypoint speed and the global height the HIGHEST waypoint (safe fallbacks), so the
      route summary may look slow and high: what counts is the speed and height on each waypoint;
-   - the actions on waypoint 1 (gimbal, IMU calibration, start point cloud recording) and on the last waypoint.
+   - the actions on waypoint 1 (gimbal, start point cloud recording) and on the last waypoint (finish recording).
 3. **Save test-01 in Pilot 2 without changing anything, then export it** (Flight Route → select → export KMZ) and copy that
    file back to the PC as \`samples/pilot2-reexport-test-01.kmz\`. Comparing what Pilot 2 writes with what we wrote is the
    single most useful check: \`node tools/compare-kmz.ts samples/generated/test-01-small-l3-survey.kmz samples/pilot2-reexport-test-01.kmz\`.

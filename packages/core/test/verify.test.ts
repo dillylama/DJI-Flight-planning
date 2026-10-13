@@ -208,7 +208,8 @@ test('faults in the header, indices and actions are caught', () => {
   assert.deepEqual(both(x => x.replace(/<wpml:actionGroup>(?:(?!<\/wpml:actionGroup>)[\s\S])*recordPointCloud[\s\S]*?<\/wpml:actionGroup>\n/, '')).filter(c => c !== 'V_ACTIONS'), []);
   assert.ok(both(x => x.replace(/<wpml:actionGroup>(?:(?!<\/wpml:actionGroup>)[\s\S])*recordPointCloud[\s\S]*?<\/wpml:actionGroup>\n/, '')).includes('V_ACTIONS'));
   // group ids out of order, a group pointing outside the route
-  assert.deepEqual(both(x => nth(x, 'actionGroupId', 1, () => '9')), ['V_ACTIONS']);
+  assert.deepEqual(both(x => nth(x, 'actionGroupId', 1, () => '0')), ['V_ACTIONS']);     // the same id twice
+  assert.deepEqual(both(x => nth(x, 'actionGroupId', 1, () => '99')), []);                // Pilot 2 numbers them in its own order
   assert.deepEqual(both(x => nth(x, 'actionGroupEndIndex', 2, () => '99999')), ['V_ACTIONS']);
   // template with a waypoint missing
   assert.deepEqual(codesOf(T.replace(/<Placemark>[\s\S]*?<\/Placemark>\n/, ''), Wl).filter(c => c !== 'V_TEMPLATE'), []);

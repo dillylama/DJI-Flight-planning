@@ -85,7 +85,8 @@ test('L3 survey route: recording, DJI IMU calibration, RGB shooting per line, gr
   const ops = [...w.matchAll(/<wpml:recordPointCloudOperate>(\w+)</g)].map(x => x[1]);
   assert.deepEqual(ops, ['startRecord', 'stopRecord']);
   assert.equal([...w.matchAll(/aircraftCalibration/g)].length, 2);
-  assert.equal([...w.matchAll(/startContinuousShooting/g)].length, plan.lines.length);
+  assert.equal([...w.matchAll(/takePhoto/g)].length, plan.lines.length);
+  assert.ok(!/ContinuousShooting|gimbalAngleLock/.test(w), 'photos are written the way Pilot 2 keeps them');
   const ids = [...w.matchAll(/<wpml:actionGroupId>(\d+)</g)].map(x => +x[1]);
   assert.deepEqual(ids, ids.map((_, i) => i), 'group ids 0..n-1 in order');
   assert.ok(w.includes('<wpml:startActionGroup>'));
@@ -97,9 +98,12 @@ test('L3 survey route: recording, DJI IMU calibration, RGB shooting per line, gr
   assert.deepEqual(parsed.waypoints[n - 1].groups[0].actions.map(a => a.func), ['recordPointCloud', 'aircraftCalibration']);
   // one arrival group per waypoint at most
   for (const p of parsed.waypoints) assert.ok(p.groups.filter(g => g.trigger === 'reachPoint').length <= 1);
-  // continuous shooting stops on the RUN-OUT waypoint (outside the block), never on a data-line waypoint
+  // photos run from the first line waypoint to the RUN-OUT waypoint, on distance; nothing is an arrival action on a data line
   parsed.waypoints.forEach((p, i) => {
-    if (p.groups.some(g => g.actions.some(a => a.func === 'stopContinuousShooting'))) assert.equal(route.wps[i].role, 'runout', `stop shooting on waypoint ${i}`);
+    for (const g of p.groups.filter(g => g.actions.some(a => a.func === 'takePhoto'))) {
+      assert.equal(g.trigger, 'multipleDistance'); assert.equal(g.triggerParam, 30);
+      assert.equal(route.wps[g.start].role, 'line'); assert.equal(route.wps[g.end].role, 'runout');
+    }
     if (route.wps[i].role === 'line') assert.ok(!p.groups.some(g => g.trigger === 'reachPoint'), 'no arrival actions on data-line waypoints');
   });
   // KMZ zips both files under wpmz/
@@ -117,8 +121,14 @@ test('straight legs by default; first and last waypoint are stop turns; fallback
   for (const i of [0, n - 1]) { assert.equal(w.waypoints[i].turnMode, 'toPointAndStopWithDiscontinuityCurvature'); assert.equal(w.waypoints[i].damping, 0); }
   for (let i = 1; i < n - 1; i++) { assert.equal(w.waypoints[i].turnMode, 'toPointAndPassWithContinuityCurvature'); assert.ok(w.waypoints[i].damping > 0); }
   // every waypoint carries its own height and speed in the template, and the global height is the HIGHEST one
-  assert.equal([...files.templateKml.matchAll(/<wpml:useGlobalHeight>0</g)].length, n);
-  assert.equal([...files.templateKml.matchAll(/<wpml:useGlobalSpeed>0</g)].length, n);
+  // as Pilot 2 writes per-waypoint values: the value itself, with no "use global" flags
+  assert.ok(!/useGlobalHeight|useGlobalSpeed|useGlobalTurnParam/.test(files.templateKml));
+  assert.equal([...files.templateKml.matchAll(/<wpml:height>/g)].length, n);
+  assert.equal([...files.templateKml.matchAll(/<wpml:waypointSpeed>/g)].length, n);
+  // gimbal straight down where recording starts, without the area-route start group or calibration actions
+  assert.deepEqual(w.waypoints[0].groups[0].actions.map(a => a.func), ['gimbalRotate', 'recordPointCloud']);
+  assert.deepEqual(w.waypoints[n - 1].groups[0].actions.map(a => a.func), ['recordPointCloud']);
+  assert.deepEqual(w.startActions, []);
   assert.ok(t.globalHeight >= Math.max(...route.wps.map(p => p.h)) - 1e-6);
   // heights round-trip: EGM96 in, ellipsoidal in the file, EGM96 back out
   w.waypoints.forEach((p, i) => assert.ok(Math.abs(p.hEgm96 - route.wps[i].h) < 1e-5, `waypoint ${i}`));

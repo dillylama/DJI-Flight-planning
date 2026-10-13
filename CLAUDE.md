@@ -80,7 +80,10 @@ DEM clip (AOI + buffer), offline basemap tiles.
 - Only verified L3 values are written: samplingRate (Hz), returnMode sedecupleReturn, scanningMode repetitive.
   Other return/scan modes need another sample. payloadSubEnumValue was 0 (waypoint) vs 1 (area): we write 0.
 - Samples + generated tests hold real site coordinates → gitignored (public repo) until Luke decides.
-- Still open: Pilot 2 import + re-export diff of our KMZ, speeds > 15 m/s, waypoint cap
+- G1 result (13 Oct 2026, docs/wpml.md): Pilot 2 keeps positions, heights, speeds, turn modes, straight legs and
+  record start/stop; it shortens executed damping to ⅓ leg ≤ 10 m, drops aircraftCalibration and the start group,
+  and turns continuous shooting into takePhoto on distance. The writer now writes exactly that.
+- Still open: waypoint cap
   (samples/generated/test-cap-*.kmz), actions in Pilot 2 waypoint UI, fly-through rounding with useStraightLine 1.
 - The route file carries neither RTH height nor Max Altitude: the planner shows both per sortie, tags the file
   name (`_RTH330_ALT430`) and makes the pilot confirm them at export.
