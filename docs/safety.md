@@ -146,11 +146,14 @@ flown.
 
 ### Resuming an interrupted job
 
-The job resumes from Pilot 2's breakpoint, as Pilot 2 does it. With L3 area routes Pilot 2 resumes by itself, flies a short
-calibration and carries on (Luke, 13 Oct 2026). Whether that holds for our waypoint routes, where the start of the
-recording is an action on waypoint 1 that has already been passed, is to be checked in the simulator with the SDK's
-breakpoint resume. Until then, when a flight resumes, check on the RC that the L3 is recording as soon as the
-route continues. The planner's "re-fly from line N" route is the fallback if it is not.
+The job resumes from Pilot 2's breakpoint, as Pilot 2 does it. Checked in the simulator on 13 Oct 2026 with
+our own waypoint route (RTH on line 1 at waypoint 3, landed, resumed from the breakpoint through the SDK): the
+aircraft took off, climbed to the breakpoint height, flew straight to the breakpoint at transit speed, re-ran the
+first waypoint's actions there (gimbal down, start recording: the L3 went to STARTED within two seconds; the
+calibration action was triggered but no passes were flown), and continued from the breakpoint at the planned
+speed to the end of the route, where it stopped recording and went home. So a breakpoint resume restarts the
+recording by itself. The planner's "re-fly from line N" route stays as a fallback. Still check the L3 status on
+the RC when a real flight resumes; it costs nothing.
 
 ## 6. What none of this covers
 

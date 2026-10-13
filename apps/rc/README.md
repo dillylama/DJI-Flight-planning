@@ -101,6 +101,11 @@ state (DJI release notes). Only one app can hold the aircraft link at a time.
 - **Corners (runs 4 and 5, 13 Oct):** a 6-line route at 10 m/s. Fly-through corners: 2.6–3.7 m/s, pivoting at the
   corner, with 20 m damping as with 10 m. `coordinateTurn` corners: 6.2–7.3 m/s, passing 4–6 m inside the corner.
   The M400 accepts `coordinateTurn`. **Confirm landing** works (`KeyConfirmLanding`).
+- **Breakpoint resume (run 6, 13 Oct):** RTH on line 1 (waypoint 3, 8 % along the leg), landed, `queryBreakPointInfo`
+  gave waypoint 3 / progress 0.076, `startMission(id, breakPoint)` took off, climbed to the breakpoint height, flew to
+  the breakpoint at 15 m/s, re-ran waypoint 1's action group there (gimbal, calibration triggered but not flown,
+  startRecord → L3 STARTED in 2 s) and continued from the breakpoint to the end. Recording stopped on the last
+  waypoint; goHome. So Pilot 2-style breakpoint resume works with our action-based recording start.
 - The simulated landing hovers at 0.5 m and the RC beeps until the landing is confirmed: **Confirm landing** button.
 - The simulator position is remembered between launches. Text entry on the RC keyboard can stick; the values can be
   set from the PC by writing the app's `shared_prefs/MainActivity.xml` with `run-as`.

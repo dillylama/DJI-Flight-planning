@@ -49,10 +49,9 @@ DEM clip (AOI + buffer), offline basemap tiles.
   exports any route for a second look in UgCS. docs/ugcs-notes.md has the UgCS 6.1 comparison.
 - **Resume (Luke's decision, 13 Oct 2026)**: after an interruption the job resumes from Pilot 2's breakpoint, the
   way Pilot 2 does it, not by re-flying a line. The planner's "re-fly from line N" route stays as the fallback.
-  Luke has seen it with the L3 on Pilot 2 area routes: the resume is automatic, the aircraft does a short
-  calibration and carries on. To confirm for OUR waypoint routes in the simulator (3DM Fly: Query breakpoint,
-  Resume from breakpoint): the L3 recording restarts (our startRecord action is on waypoint 1, already passed).
-  Until then, a resumed flight needs the L3 recording checked on the RC as soon as the route continues.
+  Confirmed in the simulator 13 Oct 2026 (3DM Fly, SDK breakpoint resume): the aircraft flies to the breakpoint,
+  re-runs waypoint 1's actions there (L3 recording restarts within 2 s; calibration passes not flown), and carries
+  on from the breakpoint. docs/safety.md "Resuming an interrupted job".
 - **Sorties**: split into battery-sized routes along the same path as resume, one-line overlap.
 - Regression test: synthetic Nimba block: 23 lines, 902 WP, 137 km. `nimba.test.ts` compares the port with the
   legacy engine on the legacy's spherical plane (`planLines(…, 'sphere')`); production uses WGS84 radii.
