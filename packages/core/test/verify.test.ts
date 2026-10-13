@@ -205,8 +205,11 @@ test('faults in the header, indices and actions are caught', () => {
   assert.deepEqual(codesOf(T, '<kml><Document></Document></kml>'), ['V_FORMAT']);
   // recording never stopped, or not started on the first waypoint
   assert.deepEqual(both(x => x.replace('>stopRecord<', '>startRecord<')), ['V_ACTIONS']);
-  assert.deepEqual(both(x => x.replace(/<wpml:actionGroup>(?:(?!<\/wpml:actionGroup>)[\s\S])*recordPointCloud[\s\S]*?<\/wpml:actionGroup>\n/, '')).filter(c => c !== 'V_ACTIONS'), []);
+  assert.deepEqual(both(x => x.replace(/<wpml:actionGroup>(?:(?!<\/wpml:actionGroup>)[\s\S])*recordPointCloud[\s\S]*?<\/wpml:actionGroup>\n/, '')).filter(c => c !== 'V_ACTIONS' && c !== 'V_TEMPLATE'), []);
   assert.ok(both(x => x.replace(/<wpml:actionGroup>(?:(?!<\/wpml:actionGroup>)[\s\S])*recordPointCloud[\s\S]*?<\/wpml:actionGroup>\n/, '')).includes('V_ACTIONS'));
+  // IMU calibration: the template's switch and the actions in waylines.wpml must agree
+  assert.deepEqual(codesOf(T.replace('<wpml:caliFlightEnable>1<', '<wpml:caliFlightEnable>0<'), Wl), ['V_TEMPLATE']);
+  assert.deepEqual(codesOf(T, Wl.replace(/<wpml:action>(?:(?!<\/wpml:action>)[\s\S])*aircraftCalibration[\s\S]*?<\/wpml:action>\n?/, '')), ['V_TEMPLATE']);
   // group ids out of order, a group pointing outside the route
   assert.deepEqual(both(x => nth(x, 'actionGroupId', 1, () => '0')), ['V_ACTIONS']);     // the same id twice
   assert.deepEqual(both(x => nth(x, 'actionGroupId', 1, () => '99')), []);                // Pilot 2 numbers them in its own order

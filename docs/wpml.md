@@ -93,7 +93,7 @@ Aircraft stops". Its terrain check result is the same as ours (102.2 m over the 
 | We wrote | Pilot 2 wrote back | Now |
 |---|---|---|
 | turn damping up to 60 m (40 % of the shorter leg) | executed damping = ⅓ of the shorter leg, at most 10 m (template keeps the imported value) | `dampingFrac 1/3`, `dampingMaxM 10` |
-| `aircraftCalibration` before start and after stop | removed (waypoint routes have a route-level "IMU Calibration" switch = `caliFlightEnable`) | not written unless asked for |
+| `aircraftCalibration` before start and after stop, `caliFlightEnable 0` | removed, because the template's switch said off. With "IMU Calibration" switched on in Pilot 2 (second export): `caliFlightEnable 1` in template.kml, and in waylines.wpml `aircraftCalibration` (heading 0, 3 × 30 m) before `startRecord` on waypoint 1 and (heading 1) after `stopRecord` on the last; +84 s | flag in the template, actions in waylines only |
 | `startActionGroup` (gimbal, focus) | removed | not written |
 | per line: `gimbalAngleLock`, `gimbalRotate` + `startContinuousShooting` on distance, stop + unlock | one `takePhoto` group per line on `multipleDistance`, same waypoint range | `takePhoto` on `multipleDistance` |
 | `useGlobalHeight/Speed/TurnParam 0` in template placemarks | flags omitted, values kept | flags omitted |
@@ -105,8 +105,8 @@ Pilot 2 also shows a banner on routes that record point cloud: keep the gimbal a
 ## Still to verify on the RC
 1. ~~Pilot 2 imports our KMZ and shows the L3 actions.~~ Done 13 Oct 2026.
 2. ~~Pilot 2 keeps the route as written.~~ Done 13 Oct 2026, see above.
-3. Waypoint speeds above 15 m/s (`test-02` at 15, `test-03` at 17 m/s): the editor's range is 1–25 m/s; confirm the values survive.
-3b. An export with Pilot 2's "IMU Calibration" switch on, to see what it writes for a waypoint route.
+3. ~~Waypoint speeds above 15 m/s.~~ Done 13 Oct 2026: `test-02` shows 15 m/s and `test-03` 17 m/s, no messages (range 1–25 m/s).
+3b. ~~An export with Pilot 2's "IMU Calibration" switch on.~~ Done 13 Oct 2026, see the table above.
 4. The waypoint cap (`test-cap-0250` … `test-cap-5000`).
 5. In the simulator: the L3 starts recording on the approach waypoint, the calibration passes fly as expected,
    and the aircraft's path at fly-through waypoints stays close to the straight legs.

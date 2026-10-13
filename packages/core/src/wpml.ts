@@ -29,9 +29,10 @@ export interface WpmlOptions {
   takeoff?: Partial<TakeoffOptions>;
   payloadPositionIndex?: number;       // 0 = the default port (samples)
   lidar?: { samplingRate: number; returnMode: typeof L3_WPML.returnModes[number]; scanningMode: typeof L3_WPML.scanningModes[number]; modelColoring: boolean } | null;
-  // DJI aircraftCalibration before startRecord and after stopRecord, as in Pilot 2's L3 AREA routes. Pilot 2
-  // removes these actions when it imports a WAYPOINT route (it has a route-level "IMU Calibration" switch
-  // instead), so this is off unless asked for.
+  // Pilot 2's "IMU Calibration" switch for a route: `caliFlightEnable 1` in template.kml, and in waylines.wpml an
+  // aircraftCalibration action (3 passes of 30 m) before startRecord on the first waypoint and after stopRecord
+  // on the last. Copied from a Pilot 2 export with the switch on (13 Oct 2026). Pilot 2 derives the actions
+  // from the flag, so they are only written when recording starts on the first waypoint and stops on the last.
   djiImuCalibration?: boolean;
   rgbPhotoSpacingM?: number | null;    // L3 RGB photo every this many metres along each data line; null = off
   gimbalStartGroup?: boolean;          // DJI start group of L3 area routes (gimbal, focus). Pilot 2 drops it from waypoint routes.
@@ -183,7 +184,13 @@ export function writeWpml(route: Route<FlightWp>, opts: WpmlOptions = {}): WpmlF
     const d = Math.hypot(dist(wps[i].xy, wps[i - 1].xy), wps[i].h - wps[i - 1].h);
     distanceM += d; durationS += d / legSpeed(wps, i - 1);
   }
-  const groups = buildGroups(route, { pos, djiImuCalibration: opts.djiImuCalibration ?? false, rgb: opts.rgbPhotoSpacingM ?? null, gimbalDown: opts.gimbalDown ?? !!lidar });
+  const cali = opts.djiImuCalibration ?? false;
+  if (cali && !(wps[0].actions.includes('START_RECORD') && wps[wps.length - 1].actions.includes('STOP_RECORD'))) {
+    throw new Error('IMU calibration is only written when recording starts on the first waypoint and stops on the last (not with the transit in the route); nothing was written.');
+  }
+  const groupOpts = { pos, rgb: opts.rgbPhotoSpacingM ?? null, gimbalDown: opts.gimbalDown ?? !!lidar };
+  const groups = buildGroups(route, { ...groupOpts, djiImuCalibration: cali });            // waylines.wpml: with the calibration actions
+  const tGroups = buildGroups(route, { ...groupOpts, djiImuCalibration: false });          // template.kml: the flag stands for them
   const now = opts.createTime ?? Date.now();
   // If a reader ever fell back to the global height, the whole route would be flown at the HIGHEST planned
   // height, which clears every leg.
@@ -211,7 +218,7 @@ export function writeWpml(route: Route<FlightWp>, opts: WpmlOptions = {}): WpmlF
         </wpml:waypointTurnParam>
         <wpml:useGlobalHeadingParam>1</wpml:useGlobalHeadingParam>
         <wpml:useStraightLine>${straight}</wpml:useStraightLine>
-${groupsXml(groups.get(i), tId, '        ')}        <wpml:isRisky>0</wpml:isRisky>
+${groupsXml(tGroups.get(i), tId, '        ')}        <wpml:isRisky>0</wpml:isRisky>
       </Placemark>`;
   }).join('\n');
   const payloadParam = `      <wpml:payloadParam>
@@ -236,7 +243,7 @@ ${missionConfig(tk, pos)}    <Folder>
       </wpml:waylineCoordinateSysParam>
       <wpml:autoFlightSpeed>${fDown(globalSpeed)}</wpml:autoFlightSpeed>
       <wpml:globalHeight>${f(globalHeight)}</wpml:globalHeight>
-      <wpml:caliFlightEnable>0</wpml:caliFlightEnable>
+      <wpml:caliFlightEnable>${cali ? 1 : 0}</wpml:caliFlightEnable>
       <wpml:gimbalPitchMode>manual</wpml:gimbalPitchMode>
       <wpml:globalWaypointHeadingParam>
         <wpml:waypointHeadingMode>followWayline</wpml:waypointHeadingMode>
