@@ -84,7 +84,9 @@ test('a transit clearance above the AGL is held on the transit legs only', () =>
 
 test('the files of a route with in-route transit pass the independent check; record actions sit on stop turns', () => {
   const { plan, flight } = build();
-  const files = writeWpml(flight, { lidar: L3, djiImuCalibration: true, rgbPhotoSpacingM: 40, gimbalStartGroup: true });
+  const files = writeWpml(flight, { lidar: L3, rgbPhotoSpacingM: 40 });
+  // Pilot 2's IMU calibration belongs to the first and last waypoint of a route: not offered with the transit in it
+  assert.throws(() => writeWpml(flight, { lidar: L3, djiImuCalibration: true }), /IMU calibration/);
   const vo = { elev: terrain, aglM: 150, corridorM: plan.o.corridorM, maxClimbMs: 4, maxDescentMs: 3, maxSpeedMs: 20, lidar: true };
   const rep = verifyRouteFiles(files.templateKml, files.waylinesWpml, vo);
   assert.deepEqual(rep.issues.map(i => i.message), []);
@@ -93,8 +95,8 @@ test('the files of a route with in-route transit pass the independent check; rec
   const a = flight.wps.findIndex(x => x.role === 'approach'), e = flight.wps.findIndex(x => x.role === 'exit');
   const stops = w.map((p, i) => (p.turnMode === STOP_TURN ? i : -1)).filter(i => i >= 0);
   assert.deepEqual(stops, [0, a, e, w.length - 1]);
-  assert.deepEqual(w[a].groups[0].actions.map(x => x.func), ['gimbalRotate', 'aircraftCalibration', 'recordPointCloud']);
-  assert.deepEqual(w[e].groups[0].actions.map(x => x.func), ['recordPointCloud', 'aircraftCalibration']);
+  assert.deepEqual(w[a].groups[0].actions.map(x => x.func), ['gimbalRotate', 'recordPointCloud']);
+  assert.deepEqual(w[e].groups[0].actions.map(x => x.func), ['recordPointCloud']);
   assert.ok(w[0].groups.length === 0 && w[w.length - 1].groups.length === 0);
   // recording that starts on a fly-through waypoint is refused
   let n = -1;

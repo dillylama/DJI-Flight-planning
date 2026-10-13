@@ -85,6 +85,9 @@ test('L3 survey route: recording, DJI IMU calibration, RGB shooting per line, gr
   const ops = [...w.matchAll(/<wpml:recordPointCloudOperate>(\w+)</g)].map(x => x[1]);
   assert.deepEqual(ops, ['startRecord', 'stopRecord']);
   assert.equal([...w.matchAll(/aircraftCalibration/g)].length, 2);
+  // as Pilot 2 writes its IMU Calibration switch: the flag in the template, the actions in waylines only
+  assert.ok(files.templateKml.includes('<wpml:caliFlightEnable>1</wpml:caliFlightEnable>') && !files.templateKml.includes('aircraftCalibration'));
+  assert.ok(writeWpml(route, { lidar: L3 }).templateKml.includes('<wpml:caliFlightEnable>0</wpml:caliFlightEnable>'));
   assert.equal([...w.matchAll(/takePhoto/g)].length, plan.lines.length);
   assert.ok(!/ContinuousShooting|gimbalAngleLock/.test(w), 'photos are written the way Pilot 2 keeps them');
   const ids = [...w.matchAll(/<wpml:actionGroupId>(\d+)</g)].map(x => +x[1]);

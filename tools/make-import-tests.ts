@@ -46,7 +46,7 @@ async function emit(name: string, poly: LonLat[], o: Partial<PlanOptions>, note:
   if (problems.length) throw new Error(`${name}: ${problems.map(i => i.message).join(' | ')}`);
   const files = writeWpml(route, {
     takeoff: { flyToMode: 'safely', takeoffSecurityM: 60, transitSpeedMs: 15 },
-    lidar: L3, rgbPhotoSpacingM: 25,     // as the planner exports: no calibration actions, no start group
+    lidar: L3, rgbPhotoSpacingM: 25, djiImuCalibration: true,     // as the planner exports by default
   });
   const rep: VerifyReport = verifyRouteFiles(files.templateKml, files.waylinesWpml, {
     elev, aglM: plan.o.aglM, corridorM: plan.o.corridorM, maxClimbMs: plan.o.climbMs, maxDescentMs: plan.o.descentMs, maxSpeedMs: 20, lidar: true,
@@ -102,7 +102,8 @@ ${rows.join('\n')}
    - the speed it shows, and whether the legs between waypoints are drawn straight. The route's global speed is
      deliberately the SLOWEST waypoint speed and the global height the HIGHEST waypoint (safe fallbacks), so the
      route summary may look slow and high: what counts is the speed and height on each waypoint;
-   - the actions on waypoint 1 (gimbal, start point cloud recording) and on the last waypoint (finish recording).
+   - the actions on waypoint 1 (gimbal, start point cloud recording) and on the last waypoint (finish recording),
+     and that "IMU Calibration" is switched on in the Route tab.
 3. **Save test-01 in Pilot 2 without changing anything, then export it** (Flight Route → select → export KMZ) and copy that
    file back to the PC as \`samples/pilot2-reexport-test-01.kmz\`. Comparing what Pilot 2 writes with what we wrote is the
    single most useful check: \`node tools/compare-kmz.ts samples/generated/test-01-small-l3-survey.kmz samples/pilot2-reexport-test-01.kmz\`.

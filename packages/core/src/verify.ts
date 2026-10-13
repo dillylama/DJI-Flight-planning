@@ -64,6 +64,7 @@ export interface ParsedRoute {
   heightMode: string;        // waylines: executeHeightMode; template: heightMode
   autoFlightSpeed: number;
   globalHeight: number;      // template only
+  caliFlight: number;        // template only: Pilot 2's route-level IMU calibration switch
   startActions: string[];
   waypoints: FileWaypoint[];
 }
@@ -116,7 +117,7 @@ export function parseRouteFile(xml: string, kind: 'waylines' | 'template'): Pars
     exitOnRCLost: txt(mc, 'exitOnRCLost') ?? '', rcLostAction: txt(mc, 'executeRCLostAction') ?? '',
     takeOffSecurityHeight: num(mc, 'takeOffSecurityHeight'), transitSpeed: num(mc, 'globalTransitionalSpeed'),
     heightMode: kind === 'waylines' ? (txt(folder, 'executeHeightMode') ?? '') : (txt(csys, 'heightMode') ?? ''),
-    autoFlightSpeed: num(folder, 'autoFlightSpeed'), globalHeight: num(folder, 'globalHeight'),
+    autoFlightSpeed: num(folder, 'autoFlightSpeed'), globalHeight: num(folder, 'globalHeight'), caliFlight: num(folder, 'caliFlightEnable'),
     startActions: kids(kid(folder, 'startActionGroup'), 'action').map(a => txt(a, 'actionActuatorFunc') ?? ''),
     waypoints,
   };
@@ -327,9 +328,14 @@ export function verifyRouteFiles(templateKml: string, waylinesWpml: string, opts
       // Pilot 2 keeps the template's damping and shortens the executed one; longer than the template is wrong.
       const stopEnd = STOP_MODES.includes(b.turnMode);
       if (a.turnMode !== b.turnMode || !(b.damping <= a.damping + 1e-6 || stopEnd) || (!stopEnd && a.straight !== b.straight)) { bad(i, 'turn settings'); break; }
-      const acts = (p: FileWaypoint) => JSON.stringify(p.groups.map(g => [g.start, g.end, g.trigger, g.triggerParam, g.actions]));
-      if (acts(a) !== acts(b)) { bad(i, 'actions'); break; }
+      // With the template's IMU calibration switch on, the calibration actions exist in waylines.wpml only.
+      const acts = (p: FileWaypoint, skipCali: boolean) => JSON.stringify(p.groups.map(g => [g.start, g.end, g.trigger, g.triggerParam, g.actions.filter(x => !(skipCali && x.func === 'aircraftCalibration'))]));
+      if (acts(a, false) !== acts(b, t.caliFlight === 1)) { bad(i, 'actions'); break; }
     }
+  }
+  const caliAt = P.flatMap((p, i) => p.groups.flatMap(g => g.actions.filter(x => x.func === 'aircraftCalibration').map(() => i)));
+  if (t.caliFlight === 1 ? !(caliAt.length === 2 && caliAt[0] === 0 && caliAt[1] === n - 1) : caliAt.length > 0) {
+    err('V_TEMPLATE', `IMU calibration: template.kml says ${t.caliFlight === 1 ? 'on' : 'off'}, waylines.wpml has calibration actions on waypoint(s) ${caliAt.map(i => i + 1).join(', ') || 'none'} (expected ${t.caliFlight === 1 ? 'the first and the last' : 'none'}).`);
   }
   // Fail-safe fallbacks: a reader that ignored the per-waypoint values would fly everything at the global
   // height and speed, so the height must clear every leg and the speed must suit the steepest one.

@@ -38,7 +38,7 @@ interface Result {
 interface View { plan: Plan; route: Route; flight: Route<FlightWp> | null; transit: Transit | null; cov: Coverage | null; issues: PlanIssue[]; lastLine: number }
 type SensorKind = 'lidar' | 'photo';
 interface SurveyCfg { sensor: SensorKind; pulse: string; scan: string; fig8: boolean; camera: string; frontlap: number; shutterInv: number; sortieMin: number; sortieOverlap: number; maxWp: number | null; djiCal: boolean; rgbPhotos: boolean; fig8End: boolean; uncertaintyM: number; demDatum: VerticalDatum; transitInRoute: boolean; profile: string }
-const SURVEY_DEFAULTS: SurveyCfg = { sensor: 'lidar', pulse: '100', scan: 'linear', fig8: true, camera: 'p1-35', frontlap: 80, shutterInv: 1000, sortieMin: M400_LIMITS.sortieMinDefault, sortieOverlap: 0, maxWp: null, djiCal: false, rgbPhotos: true, fig8End: true, uncertaintyM: SAFETY.uncertaintyDefaultM, demDatum: 'orthometric', transitInRoute: false, profile: 'l3' };
+const SURVEY_DEFAULTS: SurveyCfg = { sensor: 'lidar', pulse: '100', scan: 'linear', fig8: true, camera: 'p1-35', frontlap: 80, shutterInv: 1000, sortieMin: M400_LIMITS.sortieMinDefault, sortieOverlap: 0, maxWp: null, djiCal: true, rgbPhotos: true, fig8End: true, uncertaintyM: SAFETY.uncertaintyDefaultM, demDatum: 'orthometric', transitInRoute: false, profile: 'l3' };
 // LiDAR sensor profiles: a name, the across-track field of view used for line spacing, and the pulse rate used
 // for the density estimate. Route files are only written for the Zenmuse L3 (the one whose values were copied
 // from Pilot 2 exports); the others are for planning. Your own profiles are kept in this browser.
@@ -204,7 +204,7 @@ app.innerHTML = `
       <label data-l3><span class="lt">Scan mode</span><select id="scanSel">${L3_SCAN.map(s => opt(s.id, `${s.name} ${s.fovH}°×${s.fovV}°`)).join('')}</select></label>
       <label class="check span2"><input type="checkbox" id="fig8On" /> IMU figure-8 before lines and resumes</label>
       <label class="check span2"><input type="checkbox" id="fig8EndOn" /> IMU figure-8 at the end too ${ti('fig8End')}</label>
-      <label class="check span2" data-l3><input type="checkbox" id="djiCalOn" /> DJI IMU calibration actions (direct push only) ${ti('djiCal')}</label>
+      <label class="check span2" data-l3><input type="checkbox" id="djiCalOn" /> DJI IMU calibration at start and end ${ti('djiCal')}</label>
       <label class="check span2" data-l3><input type="checkbox" id="rgbOn" /> L3 RGB photos on data lines ${ti('rgbPhotos')}</label>
     </div>
     <div class="fields" data-only="photo">
@@ -1234,7 +1234,7 @@ function kmzFor(route: Route<FlightWp>, aglM: number): WpmlFiles {
   return writeWpml(route, {
     takeoff: { ...TAKEOFF_DEFAULTS, ...state.takeoff },
     lidar: { samplingRate: pulse().khz * 1000, returnMode: 'sedecupleReturn', scanningMode: 'repetitive', modelColoring: state.survey.rgbPhotos },
-    djiImuCalibration: state.survey.djiCal,
+    djiImuCalibration: state.survey.djiCal && !state.survey.transitInRoute,   // belongs to the first and last waypoint of a route
     rgbPhotoSpacingM: state.survey.rgbPhotos ? +rgbSpacingM(aglM).toFixed(2) : null,
     gimbalStartGroup: false,
   });
