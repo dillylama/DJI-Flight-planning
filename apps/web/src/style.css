@@ -191,3 +191,8 @@ dialog#preflight ul { margin: 0 0 14px; padding-left: 18px; font-size: 13px; lin
 dialog#preflight li { margin-bottom: 6px; }
 dialog#preflight .check { margin-bottom: 14px; font-size: 14px; }
 dialog#preflight .row { justify-content: flex-end; }
+
+/* add-your-own sensor profile */
+details#profileNew { font-size: 13px; color: var(--muted); }
+details#profileNew summary { cursor: pointer; padding: 4px 0; color: var(--accent); }
+details#profileNew .fields { margin-top: 6px; }

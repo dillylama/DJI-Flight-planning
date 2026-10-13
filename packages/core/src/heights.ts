@@ -1,6 +1,6 @@
 import { dist } from './geo.ts';
 import type { Plan } from './plan.ts';
-import { legSpeed, type Route, type RouteWp } from './route.ts';
+import { isStop, legSpeed, type Route, type RouteWp } from './route.ts';
 import { SAFETY } from './safety.ts';
 import { corridorMax, terrainAt, type ElevFn } from './terrain.ts';
 
@@ -50,7 +50,7 @@ export function applyHeights(plan: Plan, route: Route, elev: ElevFn): Route<Flig
   for (let i = 0; i < n - 1; i++) legMax.push(corridorMax(elev, proj, wps[i].xy, wps[i + 1].xy, o.corridorM, ext, o.demSampleM));
 
   const tMax = wps.map((_, i) => Math.max(i > 0 ? legMax[i - 1] : -Infinity, i < legMax.length ? legMax[i] : -Infinity));
-  const h = tMax.map(t => t + o.aglM);
+  const h = tMax.map((t, i) => t + Math.max(o.aglM, wps[i].aglM ?? 0));
 
   // Level alignment groups (only ever raising). Returns how much it changed.
   const levelRange = (from: number, to: number): number => {
@@ -60,13 +60,17 @@ export function applyHeights(plan: Plan, route: Route, elev: ElevFn): Route<Flig
     for (let i = from; i <= to; i++) { change = Math.max(change, m - h[i]); h[i] = m; }
     return change;
   };
-  let a = 0;
+  let s0 = 0;                                   // first and last waypoint that are not transit
+  while (s0 < n && wps[s0].role === 'transit') s0++;
+  let e0 = n - 1;
+  while (e0 >= 0 && wps[e0].role === 'transit') e0--;
+  let a = s0;
   while (a < n && (wps[a].role === 'approach' || wps[a].role === 'fig8')) a++;
-  let b = n - 1;
+  let b = e0;
   while (b >= 0 && (wps[b].role === 'exit' || wps[b].role === 'fig8')) b--;
   const level = () =>
-    Math.max(a > 0 ? levelRange(0, a < n && wps[a].role === 'runin' ? a : a - 1) : 0,
-      b < n - 1 ? levelRange(b >= 0 && wps[b].role === 'runout' ? b : b + 1, n - 1) : 0);
+    Math.max(a > s0 ? levelRange(s0, a < n && wps[a].role === 'runin' ? a : a - 1) : 0,
+      b < e0 ? levelRange(b >= 0 && wps[b].role === 'runout' ? b : b + 1, e0) : 0);
   level();
 
   const speed = wps.map(w => w.speed);
@@ -108,7 +112,7 @@ export function applyHeights(plan: Plan, route: Route, elev: ElevFn): Route<Flig
   const vHi = (i: number) => Math.max(speed[i], speed[i + 1], i > 0 ? speed[i - 1] : 0);
   const vLo = (i: number) => Math.min(speed[i], speed[i + 1], i > 0 ? speed[i - 1] : Infinity);
   for (let i = 1; i < n - 1; i++) {
-    if (D[i - 1] < 1e-6 || D[i] < 1e-6) continue;
+    if (D[i - 1] < 1e-6 || D[i] < 1e-6 || isStop(wps[i])) continue;   // the aircraft stops at a stop turn: nothing is rounded
     // Sideways: with turn damping d and a heading change θ the path stays within d of the waypoint, and
     // within d·tan(θ/2) of the legs for gentle turns. Keep that inside the terrain corridor.
     const ax = wps[i].xy[0] - wps[i - 1].xy[0], ay = wps[i].xy[1] - wps[i - 1].xy[1];

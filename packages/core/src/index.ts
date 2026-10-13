@@ -14,3 +14,4 @@ export * from './sorties.ts';
 export * from './wpml.ts';
 export * from './safety.ts';
 export * from './verify.ts';
+export * from './ugcs.ts';

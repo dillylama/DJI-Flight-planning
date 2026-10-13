@@ -57,6 +57,22 @@ Inertial Explorer, YellowScan, GeoCue). Everything below is from those documents
    trajectory stays continuous (unlike UgCS "forward passes"). Turns are outside the block.
 4. **Overlap bands** between consecutive strips are drawn on the map with their width and percentage.
 
+## UgCS 6.1 (Oct 2026): what we took from it
+Source: [SPH Engineering, UgCS 6.1](https://www.sphengineering.com/news/ugcs-6-1-dji-lidar-mission-planning);
+CSV columns from the UgCS manual, [Importing routes](https://manuals-ugcs.sphengineering.com/docs/importing-routes).
+
+| UgCS 6.1 | Here |
+|---|---|
+| Waypoint segments can follow terrain (AGL) on the way to and from the survey area | "Fly to route: follow terrain": transit and return are waypoints of the route, heights from the DEM corridor like every leg (`buildRoute({ transit })`). Off by default until it has been through the simulator. |
+| L1/L2/L3 return mode, sampling rate and scanning mode set in the flight plan (M350, M400) | Already written to the KMZ (`payloadParam`) for the values seen in a Pilot 2 export: 16 returns, repetitive scan, sampling rate in Hz. Other L3 return and scan modes are not in DJI's public WPML reference, so they wait for a Pilot 2 export that shows their spelling. |
+| Sensor profiles: name + FOV, line spacing derived from it | Sensor profile selector (L3, L2, L1, your own: name, FOV, pulse rate). Route files are still written for the L3 only. |
+| CSV import carries triggers, yaw, POIs, turn types | `toUgcsCsv()` / "UgCS CSV": WP, Latitude, Longitude, AltitudeAMSL, Speed, TurnType (1 stop, 2 fly-through). UgCS converts AMSL to height above its own elevation data, which makes it an independent look at terrain clearance. No L3 actions: the CSV has no column for point-cloud recording. |
+
+Not copied: thinning transit waypoints by terrain tolerance. A waypoint here takes the highest ground of both its
+legs, so on a slope long legs fly high; even spacing keeps the transit close to the ground and the rule simple.
+
 ## Still to confirm on the aircraft
+- With transit in the route: what the M400 does when the route ends above home with `goHome`, and at a stop turn
+  mid-route (approach and exit points).
 - Whether Pilot 2 / the M400 ramps speed as the DJI Fly article describes (watch the simulator telemetry on a slowed leg).
 - How the M400 actually handles a leg whose demanded climb exceeds its capability (cuts below the waypoint height?).

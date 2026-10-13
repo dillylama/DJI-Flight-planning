@@ -129,7 +129,7 @@ export interface VerifyOptions {
   maxClimbMs: number;      // no leg may demand more than these at the fastest speed written on or next to it
   maxDescentMs: number;
   maxSpeedMs: number;
-  lidar: boolean;          // expect one startRecord on the first waypoint and one stopRecord on the last
+  lidar: boolean;          // expect one startRecord and, later, one stopRecord, each on a stop-turn waypoint
   tolM?: number;           // numerical tolerance on heights (default 0.05 m)
   vertAccelMs2?: number;   // vertical acceleration assumed for the pull-up allowance (default 2 m/s²)
 }
@@ -306,8 +306,9 @@ export function verifyRouteFiles(templateKml: string, waylinesWpml: string, opts
   P.forEach((p, i) => p.groups.forEach(g => { if (g.start !== i) err('V_ACTIONS', `Action group ${g.id} sits on waypoint ${i + 1} but starts at index ${g.start}.`, [i]); }));
   if (opts.lidar) {
     const rec = P.flatMap((p, i) => p.groups.flatMap(g => g.actions.filter(a => a.func === 'recordPointCloud').map(a => ({ i, op: a.params.recordPointCloudOperate }))));
-    if (rec.length !== 2 || rec[0].op !== 'startRecord' || rec[0].i !== 0 || rec[1].op !== 'stopRecord' || rec[1].i !== n - 1) {
-      err('V_ACTIONS', `Point-cloud recording must start on the first waypoint and stop on the last; the file has ${rec.map(r => `${r.op}@${r.i + 1}`).join(', ') || 'no record actions'}.`);
+    const onStop = (i: number) => STOP_MODES.includes(P[i].turnMode);
+    if (rec.length !== 2 || rec[0].op !== 'startRecord' || rec[1].op !== 'stopRecord' || !(rec[1].i > rec[0].i) || !onStop(rec[0].i) || !onStop(rec[1].i)) {
+      err('V_ACTIONS', `Point-cloud recording must start once and stop once later, each on a stop-turn waypoint; the file has ${rec.map(r => `${r.op}@${r.i + 1}`).join(', ') || 'no record actions'}.`);
     }
   }
 

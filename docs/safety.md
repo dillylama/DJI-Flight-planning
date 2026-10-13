@@ -90,6 +90,21 @@ passing a waypoint or ramps towards the next one. A leg that would need less tha
 - Each sortie is its own route with its own values. All checks run per sortie.
 - A home point is required for export, and a new block clears the old home.
 
+### Terrain-following transit (option, off by default)
+
+With "Fly to route: follow terrain" the way from home to the approach point and from the exit point back to
+home become waypoints of the route (one every `wpSpacingM`). They get their heights from the same corridor
+search as every other leg, at the higher of the AGL and the minimum clearance, and they are checked by the same
+file verifier. The route then starts and ends directly above home. The approach and exit waypoints, where
+recording starts and stops, become **stop turns**: that is where Pilot 2's own L3 routes put those actions.
+
+Use it when ground between home and the block is higher than the block, where the aircraft's own level
+"fly to route" leg would need a very high take-off security height.
+
+Not yet tried on hardware: what the M400 does when a route ends above the home point and `finishAction` is
+`goHome` (expected: it lands), and how it behaves at stop turns in the middle of a route. Simulator first.
+RTH is unchanged: a straight line at the RTH height, checked from every point of the route including the transit.
+
 ## 5. Terrain data
 
 - GeoTIFF registration: `RasterPixelIsPoint` (GLO-30 from OpenTopography) puts the tie point at the
@@ -125,6 +140,7 @@ Items 4 and 5 are what the gates are for.
 
 | Gate | What | Pass |
 |---|---|---|
+| (any time) | Optional second opinion: export the UgCS CSV and look at the route over UgCS's own terrain |  Clearance looks the same in software that shares nothing with this planner |
 | G1 | Import the test files into Pilot 2; save and re-export `test-01`; `tools/compare-kmz.ts` | Heights within 0.1 m, speeds, damping, `useStraightLine`, actions unchanged; cap known |
 | G2 | DJI simulator, props off: full route, RTH mid-line, RC loss | Never more than a few metres below the straight-leg profile; rates within limits; RTH at the set height; L3 records |
 | G3 | Live, flat open ground, ≥ 150 m AGL, RTK fixed | Height at waypoint 1 matches the planner within ~10 m; L3 range to ground within 5 m of plan |

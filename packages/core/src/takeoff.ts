@@ -47,6 +47,7 @@ export interface Transit {
   topAboveHomeM: number;          // highest point of the flight (route and take-off transit) above the take-off point
   wp1AboveHomeM: number;          // first waypoint above the take-off point: what the RC must show there
   lowAboveHomeM: number;          // lowest point of the route relative to the take-off point (negative = below it)
+  inRoute: boolean;               // the route itself starts above home: the transit is waypoints, checked like every leg
 }
 
 export function planTransit(plan: Plan, flight: Route<FlightWp>, elev: ElevFn, home: LonLat, opts: Partial<TakeoffOptions> = {}): Transit {
@@ -123,5 +124,6 @@ export function planTransit(plan: Plan, flight: Route<FlightWp>, elev: ElevFn, h
     rthFromLast, rthDistanceM: dist(last.xy, homeXY) + (hRet - last.h) + (hRet - homeElev),
     topAboveHomeM: Math.max(...wps.map(w => w.h), ...pts.map(p => p.h)) - homeElev,
     wp1AboveHomeM: wp1.h - homeElev, lowAboveHomeM: Math.min(...wps.map(w => w.h)) - homeElev,
+    inRoute: wp1.role === 'transit',
   };
 }

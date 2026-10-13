@@ -8,7 +8,7 @@ import {
   planLines, buildRoute, applyHeights, stats, validate, readGeoTiff, rasterElev, rasterBbox, rasterGaps,
   bufferedBbox, openTopoUrl, planTransit, coverage, checkLimits, planSorties, writeWpml, writeKmz,
   cameraFovDeg, gsdCm, aglForGsd, photoPlan, frontlapAtInterval, lidarDensity,
-  safetyChecks, clearanceBudget, verifyRouteFiles,
+  safetyChecks, clearanceBudget, verifyRouteFiles, toUgcsCsv,
   type PlanOptions, type Plan, type Route, type FlightWp, type RouteStats, type Issue, type ElevFn, type Bbox,
   type LonLat, type TakeoffOptions, type Transit, type Coverage, type Pt3, type Camera, type PhotoPlan, type SortiePlan,
   type ClearanceBudget, type VerifyReport, type WpmlFiles, type VerticalDatum,
@@ -37,8 +37,25 @@ interface Result {
 // What the map/profile show: the whole job, or one sortie.
 interface View { plan: Plan; route: Route; flight: Route<FlightWp> | null; transit: Transit | null; cov: Coverage | null; issues: PlanIssue[]; lastLine: number }
 type SensorKind = 'lidar' | 'photo';
-interface SurveyCfg { sensor: SensorKind; pulse: string; scan: string; fig8: boolean; camera: string; frontlap: number; shutterInv: number; sortieMin: number; sortieOverlap: number; maxWp: number | null; djiCal: boolean; rgbPhotos: boolean; fig8End: boolean; uncertaintyM: number; demDatum: VerticalDatum }
-const SURVEY_DEFAULTS: SurveyCfg = { sensor: 'lidar', pulse: '100', scan: 'linear', fig8: true, camera: 'p1-35', frontlap: 80, shutterInv: 1000, sortieMin: M400_LIMITS.sortieMinDefault, sortieOverlap: 0, maxWp: null, djiCal: true, rgbPhotos: true, fig8End: true, uncertaintyM: SAFETY.uncertaintyDefaultM, demDatum: 'orthometric' };
+interface SurveyCfg { sensor: SensorKind; pulse: string; scan: string; fig8: boolean; camera: string; frontlap: number; shutterInv: number; sortieMin: number; sortieOverlap: number; maxWp: number | null; djiCal: boolean; rgbPhotos: boolean; fig8End: boolean; uncertaintyM: number; demDatum: VerticalDatum; transitInRoute: boolean; profile: string }
+const SURVEY_DEFAULTS: SurveyCfg = { sensor: 'lidar', pulse: '100', scan: 'linear', fig8: true, camera: 'p1-35', frontlap: 80, shutterInv: 1000, sortieMin: M400_LIMITS.sortieMinDefault, sortieOverlap: 0, maxWp: null, djiCal: true, rgbPhotos: true, fig8End: true, uncertaintyM: SAFETY.uncertaintyDefaultM, demDatum: 'orthometric', transitInRoute: false, profile: 'l3' };
+// LiDAR sensor profiles: a name, the across-track field of view used for line spacing, and the pulse rate used
+// for the density estimate. Route files are only written for the Zenmuse L3 (the one whose values were copied
+// from Pilot 2 exports); the others are for planning. Your own profiles are kept in this browser.
+interface LidarProfile { id: string; name: string; fovDeg: number; khz: number | null; custom?: boolean }
+const BUILTIN_PROFILES: LidarProfile[] = [
+  { id: 'l3', name: 'DJI Zenmuse L3', fovDeg: DEFAULTS.fovDeg, khz: null },     // pulse rate from the L3 selector below
+  { id: 'l2', name: 'DJI Zenmuse L2', fovDeg: 70, khz: 240 },
+  { id: 'l1', name: 'DJI Zenmuse L1', fovDeg: 70, khz: 240 },
+];
+const PROFILE_STORE = '3dm.lidarProfiles';
+let customProfiles: LidarProfile[] = [];
+try {
+  const raw = JSON.parse(localStorage.getItem(PROFILE_STORE) || '[]');
+  if (Array.isArray(raw)) customProfiles = raw.filter(p => p && typeof p.name === 'string' && p.fovDeg >= 10 && p.fovDeg <= 120 && p.khz > 0)
+    .map(p => ({ id: String(p.id), name: String(p.name).slice(0, 60), fovDeg: +p.fovDeg, khz: +p.khz, custom: true }));
+} catch { /* ignore */ }
+const profiles = () => [...BUILTIN_PROFILES, ...customProfiles];
 const DEMO_DEM: Dem = { name: 'Synthetic ridge (demo)', elev: demoElev, synthetic: true, source: 'demo', datum: 'orthometric', gaps: 0 };
 const LAYERS = [
   ['aoi', 'Block outline'], ['lines', 'Data lines'], ['turns', 'Run-in/out & turns'], ['fig8', 'Figure-8 & approach'],
@@ -82,6 +99,9 @@ const T = <K extends keyof TakeoffOptions>(k: K): TakeoffOptions[K] => (state.ta
 const camera = (): Camera => CAMERAS.find(c => c.id === state.survey.camera) ?? CAMERAS[1];
 const pulse = () => L3_PULSE.find(p => p.id === state.survey.pulse) ?? L3_PULSE[0];
 const scan = () => L3_SCAN.find(s => s.id === state.survey.scan) ?? L3_SCAN[0];
+const profile = () => profiles().find(p => p.id === state.survey.profile) ?? BUILTIN_PROFILES[0];
+const isL3 = () => profile().id === 'l3';
+const lidarKhz = () => profile().khz ?? pulse().khz;
 const isPhoto = () => state.survey.sensor === 'photo';
 
 // ── Layout ────────────────────────────────────────────────────────
@@ -89,7 +109,7 @@ type Field<K> = { key: K; label: string; unit: string; step: number; min: number
 const FIELDS: Field<keyof PlanOptions>[] = [
   { key: 'aglM', label: 'AGL', unit: 'm', step: 10, min: SAFETY.aglMinM, max: 1000 },
   { key: 'speedMs', label: 'Line speed', unit: 'm/s', step: 0.5, min: 1, max: M400_LIMITS.lineSpeedMaxMs },
-  { key: 'fovDeg', label: 'FOV used', unit: '°', step: 1, min: 10, max: 80, only: 'lidar' },
+  { key: 'fovDeg', label: 'FOV used', unit: '°', step: 1, min: 10, max: 120, only: 'lidar' },
   { key: 'sidelapPct', label: 'Sidelap', unit: '%', step: 5, min: 0, max: 90 },
   { key: 'courseDeg', label: 'Line course', unit: '°', step: 1, min: 0, max: 359 },
   { key: 'runInM', label: 'Run-in', unit: 'm', step: 10, min: 20, max: 1000 },
@@ -120,6 +140,8 @@ const UNC_MAX = 200, RTH_MIN = 20, RTH_MAX = SAFETY.maxAboveHomeM;
   const s = state.survey;
   if (!inRange(s.uncertaintyM, SAFETY.uncertaintyMinM, UNC_MAX)) s.uncertaintyM = SAFETY.uncertaintyDefaultM;
   if (s.demDatum !== 'orthometric' && s.demDatum !== 'ellipsoidal') s.demDatum = 'orthometric';
+  s.transitInRoute = s.transitInRoute === true;
+  if (!profiles().some(p => p.id === s.profile)) s.profile = 'l3';
   if (!inRange(s.sortieMin, 5, 50)) s.sortieMin = M400_LIMITS.sortieMinDefault;
   if (!inRange(s.sortieOverlap, 0, 2)) s.sortieOverlap = 0;
   if (s.maxWp != null && !inRange(s.maxWp, 50, 65535)) s.maxWp = null;
@@ -141,6 +163,7 @@ app.innerHTML = `
   <div class="blockname" id="blockName">No block loaded</div>
   <div class="head-actions">
     <button id="exportJson" class="ghost" disabled${btnTip('exportJson')}>Export mission.json</button>
+    <button id="exportCsv" class="ghost" disabled${btnTip('exportCsv')}>UgCS CSV</button>
     <button id="exportKmz" class="ghost" disabled>Export KMZ</button>
   </div>
 </header>
@@ -166,14 +189,23 @@ app.innerHTML = `
   </section>
   <section>
     <h2>Sensor ${ti('sensor')}</h2>
-    <div class="seg" id="sensorSeg"><button data-sensor="lidar">LiDAR · Zenmuse L3</button><button data-sensor="photo">Photogrammetry</button></div>
+    <div class="seg" id="sensorSeg"><button data-sensor="lidar">LiDAR</button><button data-sensor="photo">Photogrammetry</button></div>
     <div class="fields" data-only="lidar">
-      <label><span class="lt">Pulse rate ${ti('lidarMode')}</span><select id="pulseSel">${L3_PULSE.map(p => opt(p.id, `${p.khz} kHz · AGL < ${p.maxAglM} m`)).join('')}</select></label>
-      <label><span class="lt">Scan mode</span><select id="scanSel">${L3_SCAN.map(s => opt(s.id, `${s.name} ${s.fovH}°×${s.fovV}°`)).join('')}</select></label>
+      <label class="span2"><span class="lt">Sensor profile ${ti('profile')}</span><select id="profileSel"></select></label>
+      <details class="span2" id="profileNew"><summary>Add your own sensor</summary>
+        <div class="fields">
+          <label class="span2"><span class="lt">Name</span><input type="text" id="pfName" maxlength="60" placeholder="e.g. my fixed-wing LiDAR" /></label>
+          <label><span class="lt">FOV used <em>°</em></span><input type="number" id="pfFov" min="10" max="120" step="1" /></label>
+          <label><span class="lt">Pulse rate <em>kHz</em></span><input type="number" id="pfKhz" min="1" max="5000" step="1" /></label>
+        </div>
+        <div class="row"><button id="pfSave" class="ghost" type="button">Save profile</button><button id="pfDel" class="link" type="button">Delete selected</button></div>
+      </details>
+      <label data-l3><span class="lt">Pulse rate ${ti('lidarMode')}</span><select id="pulseSel">${L3_PULSE.map(p => opt(p.id, `${p.khz} kHz · AGL < ${p.maxAglM} m`)).join('')}</select></label>
+      <label data-l3><span class="lt">Scan mode</span><select id="scanSel">${L3_SCAN.map(s => opt(s.id, `${s.name} ${s.fovH}°×${s.fovV}°`)).join('')}</select></label>
       <label class="check span2"><input type="checkbox" id="fig8On" /> IMU figure-8 before lines and resumes</label>
       <label class="check span2"><input type="checkbox" id="fig8EndOn" /> IMU figure-8 at the end too ${ti('fig8End')}</label>
-      <label class="check span2"><input type="checkbox" id="djiCalOn" /> DJI IMU calibration at start and end ${ti('djiCal')}</label>
-      <label class="check span2"><input type="checkbox" id="rgbOn" /> L3 RGB photos on data lines ${ti('rgbPhotos')}</label>
+      <label class="check span2" data-l3><input type="checkbox" id="djiCalOn" /> DJI IMU calibration at start and end ${ti('djiCal')}</label>
+      <label class="check span2" data-l3><input type="checkbox" id="rgbOn" /> L3 RGB photos on data lines ${ti('rgbPhotos')}</label>
     </div>
     <div class="fields" data-only="photo">
       <label class="span2"><span class="lt">Camera ${ti('camera')}</span><select id="camSel">${CAMERAS.map(c => opt(c.id, c.name)).join('')}</select></label>
@@ -199,7 +231,7 @@ app.innerHTML = `
       ${TK_FIELDS.map(f => fieldHtml(f, 'takeoff')).join('')}
       <label><span class="lt">RTH height <em>m</em>${ti('rthHeightM')}</span><input type="number" id="rthHeight" step="10" min="${RTH_MIN}" max="${RTH_MAX}" placeholder="auto" /></label>
       <label class="span2"><span class="lt">Fly to route ${ti('flyToMode')}</span>
-        <select id="flyToMode"><option value="safely">Safely: climb, then fly level</option><option value="pointToPoint">Point to point: climb, then slope</option></select></label>
+        <select id="flyToMode"><option value="safely">Safely: climb, then fly level</option><option value="pointToPoint">Point to point: climb, then slope</option><option value="route">Follow terrain: transit and return are waypoints of the route</option></select></label>
       <label class="span2"><span class="lt">Usable time per battery set <em>min</em><i class="ti" tabindex="0" data-tip="Planning endurance per sortie, landing reserve already removed. DJI quotes 59 min flight / 53 min hover for the M400 with the light H30T only; there is no official figure with the 1.75 kg L3." data-rec="${M400_LIMITS.sortieMinDefault} min with L3 until you have your own logs.">i</i></span><input type="number" id="sortieIn" step="1" min="5" max="50" /></label>
       <label><span class="lt">Lines re-flown <em>per split</em>${ti('sortieOverlap')}</span><input type="number" id="overlapIn" step="1" min="0" max="2" /></label>
       <label><span class="lt">Max WPs per route${ti('maxWp')}</span><input type="number" id="maxWpIn" step="50" min="50" placeholder="unknown" /></label>
@@ -291,7 +323,12 @@ function syncFields() {
     i.value = String(i.dataset.group === 'plan' ? P(i.dataset.key as keyof PlanOptions) : T(i.dataset.key as keyof TakeoffOptions));
   });
   $<HTMLInputElement>('rthHeight').value = state.takeoff.rthHeightM != null ? String(state.takeoff.rthHeightM) : '';
-  $<HTMLSelectElement>('flyToMode').value = T('flyToMode');
+  $<HTMLSelectElement>('flyToMode').value = state.survey.transitInRoute ? 'route' : T('flyToMode');
+  const ps = $<HTMLSelectElement>('profileSel');
+  ps.innerHTML = profiles().map(p => opt(p.id, `${esc(p.name)} · ${p.fovDeg}°${p.khz ? ` · ${p.khz} kHz` : ''}${p.custom ? ' (yours)' : ''}`)).join('');
+  ps.value = profile().id;
+  $<HTMLButtonElement>('pfDel').hidden = !profile().custom;
+  document.querySelectorAll<HTMLElement>('aside [data-l3]').forEach(el => { el.hidden = !isL3(); });
   const s = state.survey;
   $<HTMLSelectElement>('pulseSel').value = s.pulse;
   $<HTMLSelectElement>('scanSel').value = s.scan;
@@ -323,6 +360,7 @@ function renderSensorNote() {
     const c = camera();
     el.textContent = `${c.note ?? ''}. Across-track FOV ${cameraFovDeg(c).toFixed(1)}°, min interval ${c.minIntervalS} s.`;
   } else {
+    if (!isL3()) { const q = profile(); el.textContent = `${q.name}: ${q.fovDeg}° used for the swath, ${q.khz} kHz for the density estimate. Planning only: route files are written for the Zenmuse L3.`; return; }
     const p = pulse(), s = scan();
     el.textContent = `${p.khz} kHz: DJI max AGL ${p.maxAglM} m, max distance ${p.maxRangeM} m, returns ${p.returns}${p.note ? `, ${p.note}` : ''}. ${s.name} ${s.fovH}°×${s.fovV}°: ${s.use}. Swath uses "FOV used" (edge-trimmed from ${s.fovH}°).`;
   }
@@ -354,7 +392,35 @@ $('rthHeight').addEventListener('input', e => {
   persist(); schedule();
 });
 $('uncIn').addEventListener('input', e => { const v = numberIn(e.target as HTMLInputElement); if (v != null) { state.survey.uncertaintyM = v; persist(); schedule(); } });
-$('flyToMode').addEventListener('change', e => { state.takeoff.flyToMode = (e.target as HTMLSelectElement).value as TakeoffOptions['flyToMode']; persist(); schedule(); });
+$('flyToMode').addEventListener('change', e => {
+  const v = (e.target as HTMLSelectElement).value;
+  state.survey.transitInRoute = v === 'route';
+  if (v !== 'route') state.takeoff.flyToMode = v as TakeoffOptions['flyToMode'];
+  persist(); schedule();
+});
+$('profileSel').addEventListener('change', e => {
+  state.survey.profile = (e.target as HTMLSelectElement).value;
+  state.params.fovDeg = profile().fovDeg;                    // line spacing follows the sensor's field of view
+  change();
+});
+$('pfSave').onclick = () => {
+  const name = $<HTMLInputElement>('pfName').value.trim(), fov = numberIn($<HTMLInputElement>('pfFov')), khz = numberIn($<HTMLInputElement>('pfKhz'));
+  $<HTMLInputElement>('pfName').classList.toggle('bad', !name);
+  if (!name || fov == null || khz == null) return;
+  const p: LidarProfile = { id: 'c' + Date.now().toString(36), name, fovDeg: fov, khz, custom: true };
+  customProfiles.push(p);
+  try { localStorage.setItem(PROFILE_STORE, JSON.stringify(customProfiles)); } catch { /* ignore */ }
+  state.survey.profile = p.id; state.params.fovDeg = fov;
+  $<HTMLInputElement>('pfName').value = ''; $<HTMLDetailsElement>('profileNew').open = false;
+  change();
+};
+$('pfDel').onclick = () => {
+  if (!profile().custom) return;
+  customProfiles = customProfiles.filter(p => p.id !== profile().id);
+  try { localStorage.setItem(PROFILE_STORE, JSON.stringify(customProfiles)); } catch { /* ignore */ }
+  state.survey.profile = 'l3'; state.params.fovDeg = BUILTIN_PROFILES[0].fovDeg;
+  change();
+};
 $('resetParams').onclick = () => { state.params = {}; change(); };
 $('sensorSeg').addEventListener('click', e => {
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-sensor]');
@@ -435,9 +501,10 @@ map.addControl(deck);
 
 const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 const roleColor = () => ['match', ['get', 'role'],
-  'line', css('--c-line'), 'fig8', css('--c-fig8'), 'approach', css('--c-appr'), 'exit', css('--c-appr'), css('--c-run')] as unknown as string;
+  'line', css('--c-line'), 'fig8', css('--c-fig8'), 'approach', css('--c-appr'), 'exit', css('--c-appr'), 'transit', css('--c-transit'), css('--c-run')] as unknown as string;
 const visibleRoles = () => [
   ...(state.layers.lines ? ['line'] : []), ...(state.layers.turns ? ['runin', 'runout'] : []), ...(state.layers.fig8 ? ['fig8', 'approach', 'exit'] : []),
+  ...(state.layers.transit ? ['transit'] : []),
 ];
 
 let mapReady = false;
@@ -545,7 +612,10 @@ document.addEventListener('click', e => {
 let timer = 0;
 function schedule() { clearTimeout(timer); timer = window.setTimeout(run, 60); }
 const planOpts = (): Partial<PlanOptions> => (isPhoto() ? { ...state.params, fovDeg: cameraFovDeg(camera()) } : state.params);
-const routeOpts = (fromLine?: number) => ({
+const routeOpts = (plan: Plan, fromLine?: number) => ({
+  // Terrain-following transit: home → approach and exit → home become waypoints of the route.
+  transit: state.survey.transitInRoute && state.home
+    ? { home: plan.proj.fwd(state.home[0], state.home[1]), speedMs: T('transitSpeedMs'), clearanceM: T('minClearanceM') } : null,
   fig8: !isPhoto() && state.survey.fig8,
   fig8End: !isPhoto() && state.survey.fig8 && state.survey.fig8End,
   ...(state.resume.on && fromLine != null ? { fromLine, speedMs: state.resume.speed } : {}),
@@ -559,7 +629,7 @@ function compute(): Result | null {
   const plan = planLines(state.aoi.poly, planOpts());
   if (!plan.lines.length) return null;
   const fromLine = state.resume.on ? Math.min(plan.lines.length, Math.max(1, state.resume.fromLine)) - 1 : undefined;
-  const route = buildRoute(plan, routeOpts(fromLine));
+  const route = buildRoute(plan, routeOpts(plan, fromLine));
   const r: Result = { plan, route, flight: null, st: null, issues: [], demError: null, transit: null, cov: null, photo: null, totalMin: null, sp: null, budget: null, verify: null };
   if (isPhoto()) r.photo = photoPlan(camera(), plan.o.aglM, route.speedMs, state.survey.frontlap, 1 / state.survey.shutterInv);
   if (!state.dem) return r;
@@ -605,14 +675,15 @@ function compute(): Result | null {
   }
   const t = r.transit;
   r.totalMin = r.st.flightMin + (t ? t.timeS / 60 + t.rthDistanceM / T('transitSpeedMs') / 60 : 0);
-  const limitCtx = { sensor: state.survey.sensor, pulse: isPhoto() ? undefined : pulse(), scanFovH: isPhoto() ? undefined : plan.o.fovDeg, sortieMin: state.survey.sortieMin };
+  if (t?.inRoute) r.issues.push({ severity: 'info', code: 'TRANSIT_IN_ROUTE', message: 'Transit is part of the route: it starts and ends directly above home and follows the terrain in between, and the aircraft stops at the approach and exit points to start and stop recording. Take off within a few metres of the planned home point. How the aircraft ends a route above home has not been tried in the simulator yet.' });
+  const limitCtx = { sensor: state.survey.sensor, pulse: isPhoto() || !isL3() ? undefined : pulse(), scanFovH: isPhoto() ? undefined : plan.o.fovDeg, sortieMin: state.survey.sortieMin };
   r.issues.push(...checkLimits(plan, r.flight, { ...limitCtx, totalMin: r.totalMin, topAboveHomeM: t?.topAboveHomeM }).filter(i => i.code !== 'SORTIES'));
   try {
     r.sp = planSorties(plan, state.dem.elev, state.home, state.takeoff, {
       usableMin: state.survey.sortieMin, firstLine: route.startIdx, speedMs: route.speedMs, fig8: !isPhoto() && state.survey.fig8,
       fig8End: !isPhoto() && state.survey.fig8 && state.survey.fig8End,
       overlapLines: state.survey.sortieOverlap, maxWaypoints: state.survey.maxWp,
-      climbMs: P('climbMs'), descentMs: P('descentMs'), full: r.flight,
+      climbMs: P('climbMs'), descentMs: P('descentMs'), full: r.flight, transitInRoute: state.survey.transitInRoute,
     });
     r.issues.push(...r.sp.issues);
     // Each sortie is flown as its own route, with its own heights, figure-8s, transit and RTH: check each one.
@@ -733,6 +804,7 @@ function updateButtons() {
   const why = !r?.flight ? 'Load a block and terrain first.' : errors ? 'Blocked: see the errors under Checks.' : checking ? 'Checking the route files…' : null;
   const ej = $<HTMLButtonElement>('exportJson'), pb = $<HTMLButtonElement>('publishBtn'), kb = $<HTMLButtonElement>('exportKmz');
   ej.disabled = pb.disabled = blocked;
+  $<HTMLButtonElement>('exportCsv').disabled = blocked || !r?.sp;
   kb.disabled = blocked || !!kmzBlock;
   kb.textContent = checking ? 'Checking files…' : 'Export KMZ';
   kb.dataset.tip = kmzBlock ?? why ?? 'Download the DJI KMZ of every sortie (template.kml + waylines.wpml), exactly the files that passed the independent check. Import into Pilot 2 or push from 3DM Fly.';
@@ -811,7 +883,7 @@ function renderMap(r: View | null) {
 function renderDeck(r: View | null) {
   if (!state.view3d || !r?.flight) { deck.setProps({ layers: [] }); return; }
   const col: Record<string, [number, number, number, number]> = {
-    line: rgba('--c-line'), fig8: rgba('--c-fig8'), approach: rgba('--c-appr'), exit: rgba('--c-appr'), runin: rgba('--c-run'), runout: rgba('--c-run'),
+    line: rgba('--c-line'), fig8: rgba('--c-fig8'), approach: rgba('--c-appr'), exit: rgba('--c-appr'), runin: rgba('--c-run'), runout: rgba('--c-run'), transit: rgba('--c-transit'),
   };
   const roles = new Set(visibleRoles());
   const segs = segments(r, true).filter(s => roles.has(s.role));
@@ -857,8 +929,8 @@ function renderStats(r: Result | null) {
       ...(st ? [['Photos (approx.)', fmt(st.dataKm * 1000 / photo.photoSpacingM)] as Row] : []),
     );
   } else {
-    const p = pulse(), d = lidarDensity(p.khz * 1000, route.speedMs, plan.swath, plan.spacing);
-    rows.push('LiDAR · L3',
+    const p = { khz: lidarKhz() }, d = lidarDensity(p.khz * 1000, route.speedMs, plan.swath, plan.spacing);
+    rows.push(`LiDAR · ${profile().name.replace(/^DJI Zenmuse /, '')}`,
       ['Pulse rate', `${p.khz} kHz`],
       ['Density per strip', `${fmt(d.perStrip)} pts/m²`, 'PRR ÷ (speed × swath) at nominal AGL, first return only, uniform spread assumed.'],
       ['Density with sidelap', `${fmt(d.total)} pts/m²`, 'PRR ÷ (speed × line spacing): all overlapping strips combined.'],
@@ -867,7 +939,7 @@ function renderStats(r: Result | null) {
       ...(cov ? [['Swath on lines', `${fmt(cov.swathMinM)}–${fmt(cov.swathMaxM)} m`] as Row] : []),
     );
     const rgb = CAMERAS.find(c => c.id === 'l3-100')!;
-    rows.push(['L3 RGB GSD / frontlap', `${fmt(gsdCm(rgb, plan.o.aglM), 1)} cm · ${fmt(frontlapAtInterval(rgb, plan.o.aglM, route.speedMs, rgb.minIntervalS))} %`, 'L3 100 MP mapping cameras at nominal AGL, shooting every 1 s (their minimum).']);
+    if (isL3()) rows.push(['L3 RGB GSD / frontlap', `${fmt(gsdCm(rgb, plan.o.aglM), 1)} cm · ${fmt(frontlapAtInterval(rgb, plan.o.aglM, route.speedMs, rgb.minIntervalS))} %`, 'L3 100 MP mapping cameras at nominal AGL, shooting every 1 s (their minimum).']);
   }
   if (st) rows.push('Flight',
     ['Route', `${fmt(st.routeKm, 1)} km (${fmt(st.dataKm, 1)} on lines)`],
@@ -896,8 +968,13 @@ function renderStats(r: Result | null) {
   }
   const t = selSo?.transit ?? r.transit;
   if (t) rows.push('Take-off & return',
-    ['Take-off transit', `${fmt(t.distanceM / 1000, 1)} km · ${fmt(t.timeS / 60, 1)} min`],
-    ['Transit clearance', `${fmt(t.minClearanceM)} m min`],
+    ...(t.inRoute ? [
+      ['Transit', 'in the route, follows terrain', 'The way out and back are waypoints of the route, every "Max WP spacing", with heights from the DEM like every other leg. They are in the route length and time above.'] as Row,
+      ['Transit clearance', `≥ ${fmt(Math.max(plan.o.aglM, T('minClearanceM')))} m`, 'The higher of the AGL and the minimum terrain clearance, over the highest DEM cell in the corridor of each transit leg.'] as Row,
+    ] : [
+      ['Take-off transit', `${fmt(t.distanceM / 1000, 1)} km · ${fmt(t.timeS / 60, 1)} min`] as Row,
+      ['Transit clearance', `${fmt(t.minClearanceM)} m min`] as Row,
+    ]),
     ['RTH height to set', `${fmt(t.rthHeightM)} m${state.takeoff.rthHeightM == null ? ' auto' : ''} (rec. ≥ ${fmt(t.rthRecommendedM)})`, 'Above the take-off point. The route file cannot carry this: it must be set on the RC before take-off. With several sorties each has its own value; select a sortie to see it.'],
     ['Max Altitude to set', `≥ ${fmt(maxAltSetting(t))} m`, `The flight reaches ${fmt(t.topAboveHomeM)} m above the take-off point and the RTH height is ${fmt(t.rthHeightM)} m. The aircraft\'s Max Altitude setting must be above both, or it will refuse the route, stop climbing, or return home too low.`],
     ['Height at WP 1', `${fmt(t.wp1AboveHomeM)} m above take-off`, 'What the RC should show as height (H) when the aircraft reaches the first waypoint, if it took off from the planned home. More than about 10 m off means the heights are not what was planned: stop the mission.'],
@@ -954,7 +1031,14 @@ function renderProf() {
     return;
   }
   let pts: ProfilePt[], floor: number;
-  if (state.selLine === 'transit' && r.transit) {
+  if (state.selLine === 'transit' && r.transit?.inRoute) {
+    const firstRunIn = r.flight.wps.findIndex(w => w.role === 'runin');
+    pts = r.flight.wps.slice(0, firstRunIn + 1);
+    floor = r.plan.o.aglM;
+    $('floorLabel').textContent = 'Terrain + AGL';
+    const tr = pts.filter(w => w.role === 'transit');
+    info.textContent = `transit follows the terrain: ${tr.length} waypoints, height ${fmt(Math.min(...tr.map(w => w.h)))}–${fmt(Math.max(...tr.map(w => w.h)))} m`;
+  } else if (state.selLine === 'transit' && r.transit) {
     pts = [...r.transit.path.map(p => ({ xy: r.plan.proj.fwd(p.lon, p.lat), h: p.h, role: 'transit' })),
       ...r.flight.wps.filter(w => w.role === 'approach' || w.role === 'fig8')];
     floor = T('minClearanceM');
@@ -1101,7 +1185,7 @@ function courseCost(c: number): number {
   const p = planLines(state.aoi!.poly, { ...planOpts(), courseDeg: c });
   if (!state.dem) return p.lines.length * 1e9 + p.lines.reduce((s, L) => s + (L.umax - L.umin), 0);
   try {
-    const f = applyHeights(p, buildRoute(p, routeOpts()), state.dem.elev);
+    const f = applyHeights(p, buildRoute(p, routeOpts(p)), state.dem.elev);
     const st = stats(p, f);
     const lineAgl = f.wps.filter(w => w.role === 'line').map(w => w.h - w.terrainUnderWp);
     return st.routeKm * (lineAgl.reduce((s, v) => s + v, 0) / lineAgl.length / p.o.aglM);
@@ -1138,6 +1222,7 @@ function base64(b: Uint8Array): string {
 // ── Route files (DJI WPML, from the Pilot 2 samples) ─────────────
 function kmzBlocker(): string | null {
   if (isPhoto()) return 'KMZ export for photogrammetry needs a P1 (or L3 RGB-only) Pilot 2 sample first.';
+  if (!isL3()) return 'Route files are only written for the Zenmuse L3 on the M400. Other sensor profiles are for planning.';
   if (state.survey.scan !== 'linear') return 'Only the Linear (repetitive) scan mode is verified from your samples so far.';
   return null;
 }
@@ -1238,7 +1323,7 @@ async function buildMission(r: Result, v: Verified | null) {
     dem: { name: d.name, source: d.source, datum: d.datum, cellsWithoutData: d.gaps },
     heights: 'h = metres above mean sea level (EGM96, the DEM datum). The KMZ files carry the same heights as WGS84 ellipsoidal executeHeight.',
     sensor: isPhoto() ? { kind: 'photo', camera: camera(), frontlapPct: state.survey.frontlap, exposureS: 1 / state.survey.shutterInv, plan: r.photo }
-      : { kind: 'lidar', payload: 'Zenmuse L3', pulse: pulse(), scanMode: scan(), fig8: state.survey.fig8 },
+      : { kind: 'lidar', payload: profile().name, fovDeg: r.plan.o.fovDeg, pulseKhz: lidarKhz(), ...(isL3() ? { pulse: pulse(), scanMode: scan() } : {}), fig8: state.survey.fig8, transitInRoute: state.survey.transitInRoute },
     home: state.home ? { lon: state.home[0], lat: state.home[1], groundH: r.transit?.homeElev ?? null } : null,
     takeoff: { ...TAKEOFF_DEFAULTS, ...state.takeoff, rthHeightM: r.transit?.rthHeightM ?? state.takeoff.rthHeightM ?? null },
     resume: state.resume.on ? state.resume : null, stats: r.st, coverage: r.cov && { ...r.cov, swaths: undefined }, issues: r.issues,
@@ -1268,6 +1353,21 @@ $('exportJson').onclick = async () => {
   const mission = await buildMission(rel.r, rel.v);
   if (state.result !== rel.r) return;
   download(`${missionBase()}.mission.json`, new Blob([JSON.stringify(mission, null, 1)], { type: 'application/json' }));
+};
+
+// The same routes as a CSV for UgCS: import it there to look at terrain clearance in software that shares
+// nothing with this planner. Only routes that passed the checks here are exported.
+$('exportCsv').onclick = async () => {
+  const rel = releasable();
+  if (!rel?.r.sp) return;
+  const sorties = rel.r.sp.sorties;
+  const name = (so: typeof sorties[number]) => `${missionBase()}${sorties.length > 1 ? `_S${String(so.index + 1).padStart(2, '0')}_L${so.fromLine + 1}-${so.toLine + 1}` : ''}_UgCS-check.csv`;
+  const sel = state.selSortie !== 'all' ? sorties[state.selSortie] : undefined;
+  const list = sel ? [sel] : sorties;
+  if (list.length === 1) { download(name(list[0]), new Blob([toUgcsCsv(list[0].route)], { type: 'text/csv' })); return; }
+  const zip = new JSZip();
+  for (const so of list) zip.file(name(so), toUgcsCsv(so.route));
+  download(`${missionBase()}_${list.length}-sorties_UgCS-check.zip`, await zip.generateAsync({ type: 'blob' }));
 };
 
 $('exportKmz').onclick = async () => {

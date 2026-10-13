@@ -1,9 +1,11 @@
 import { type XY, G, D2R, add, dist, mul } from './geo.ts';
 import type { Plan } from './plan.ts';
 
-export type Role = 'approach' | 'fig8' | 'runin' | 'line' | 'runout' | 'exit';
+export type Role = 'transit' | 'approach' | 'fig8' | 'runin' | 'line' | 'runout' | 'exit';
 export type Action = 'START_RECORD' | 'STOP_RECORD';
-export type TurnMode = 'toPointAndPassWithContinuityCurvature';
+export type TurnMode = 'toPointAndPassWithContinuityCurvature' | 'toPointAndStopWithDiscontinuityCurvature';
+export const STOP_TURN: TurnMode = 'toPointAndStopWithDiscontinuityCurvature';
+export const isStop = (w: { turnMode: string }) => w.turnMode === STOP_TURN;
 
 export interface RouteWp {
   xy: XY;
@@ -13,6 +15,7 @@ export interface RouteWp {
   line?: number;
   dampingM: number;
   turnMode: TurnMode;
+  aglM?: number;           // clearance this waypoint needs when it is more than the plan's AGL (transit legs)
 }
 
 // Speed on leg i (waypoint i → i+1). DJI WPML: `waypointSpeed` is the speed from that waypoint to the
@@ -33,19 +36,31 @@ export interface BuildOptions {
   fig8End?: boolean;       // figure-8 after the last line too, before recording stops (default: same as fig8)
   startLine?: number;      // explicit first line (sorties); overrides fromLine, no line of overlap added
   endLine?: number;        // last line flown, inclusive (sorties); default the last line
+  // Terrain-following transit: the way from home to the approach point and back from the exit point become
+  // waypoints of the route (every wpSpacingM), with heights from the DEM like every other leg, instead of the
+  // aircraft's own straight "fly to route" leg. The route then starts and ends above home, and the approach
+  // and exit waypoints, where recording starts and stops, are stop turns.
+  transit?: { home: XY; speedMs: number; clearanceM: number } | null;
 }
 
 // Full job, a resume from any line, or one sortie (a line range).
-export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true, fig8End, startLine, endLine }: BuildOptions = {}): Route {
+export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true, fig8End, startLine, endLine, transit = null }: BuildOptions = {}): Route {
   const { o, d, c, lines } = plan;
   const v = speedMs || o.speedMs;
   const endEight = fig8End ?? fig8;
   const startIdx = startLine ?? Math.max(0, fromLine - (fromLine > 0 ? 1 : 0));
   const lastIdx = Math.min(lines.length - 1, endLine ?? lines.length - 1);
   const toXY = (u: number, vv: number): XY => add(mul(d, u), mul(c, vv));
-  const wps: Omit<RouteWp, 'dampingM' | 'turnMode'>[] = [];
-  const push = (xy: XY, role: Role, extra: Partial<RouteWp> = {}) =>
+  const wps: (Omit<RouteWp, 'dampingM' | 'turnMode'> & { stop?: boolean })[] = [];
+  const push = (xy: XY, role: Role, extra: Partial<RouteWp> & { stop?: boolean } = {}) =>
     wps.push({ xy, role, speed: v, actions: [], ...extra });
+  // Transit waypoints from a towards b, at most wpSpacingM apart: a itself and the points in between, not b.
+  const ferry = (a: XY, b: XY, includeA: boolean) => {
+    const n = Math.max(1, Math.ceil(dist(a, b) / o.wpSpacingM));
+    for (let k = includeA ? 0 : 1; k < (includeA ? n : n + 1); k++) {
+      push(add(a, mul([b[0] - a[0], b[1] - a[1]], k / n)), 'transit', { speed: transit!.speedMs, aglM: Math.max(o.aglM, transit!.clearanceM) });
+    }
+  };
 
   // Run-in / run-out are never shorter than 20 m: a zero-length one would put two waypoints on the same spot.
   const runIn = Math.max(20, o.runInM), runOut = Math.max(20, o.runOutM);
@@ -72,7 +87,9 @@ export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true, fig
   const hdg0 = mul(d, first.dir);
   const runInStart = toXY(first.dir > 0 ? first.umin - runIn : first.umax + runIn, first.v);
   const X0 = add(runInStart, mul(hdg0, -r));
-  push(add(X0, mul(hdg0, -straight)), 'approach', { actions: ['START_RECORD'] });   // recording running before the 8
+  const approachXY = add(X0, mul(hdg0, -straight));
+  if (transit) ferry(transit.home, approachXY, true);
+  push(approachXY, 'approach', { actions: ['START_RECORD'], stop: !!transit });   // recording running before the 8
   if (fig8) eight(X0, hdg0);
 
   for (let i = startIdx; i <= lastIdx; i++) {
@@ -96,17 +113,19 @@ export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true, fig
     eight(X1, hdg1);
     push(add(X1, mul(hdg1, straight)), 'exit');
   }
-  wps[wps.length - 1].actions.push('STOP_RECORD');
+  const end = wps[wps.length - 1];
+  end.actions.push('STOP_RECORD');
+  if (transit) { end.stop = true; end.speed = transit.speedMs; ferry(end.xy, transit.home, false); }
 
   // Damping per waypoint: fraction of the shorter adjacent leg (DJI requires < leg length).
-  const out: RouteWp[] = wps.map((w, i) => {
+  const out: RouteWp[] = wps.map(({ stop, ...w }, i) => {
     const legs: number[] = [];
     if (i > 0) legs.push(dist(w.xy, wps[i - 1].xy));
     if (i < wps.length - 1) legs.push(dist(w.xy, wps[i + 1].xy));
     return {
       ...w,
-      dampingM: Math.min(o.dampingMaxM, o.dampingFrac * Math.min(...legs)),
-      turnMode: 'toPointAndPassWithContinuityCurvature',
+      dampingM: stop ? 0 : Math.min(o.dampingMaxM, o.dampingFrac * Math.min(...legs)),
+      turnMode: stop ? STOP_TURN : 'toPointAndPassWithContinuityCurvature',
     };
   });
 
