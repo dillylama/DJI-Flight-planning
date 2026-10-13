@@ -20,6 +20,7 @@ export interface SortieOptions {
   climbMs?: number;               // vertical rates used for the time estimate (use conservative limits)
   descentMs?: number;
   fixedMin?: number;              // added to every sortie: take-off checks, calibration passes, landing (default 2)
+  transitInRoute?: boolean;       // terrain-following transit: each sortie's route starts and ends above home
   full?: Route<FlightWp>;         // heights of the whole job from firstLine, if already computed
 }
 
@@ -77,13 +78,14 @@ export function planSorties(
   const factor = (li: number | undefined) => (li != null && fastT.get(li) ? slowT.get(li)! / fastT.get(li)! : 1);
 
   const homeXY = home ? plan.proj.fwd(home[0], home[1]) : null;
+  const ferry = homeXY && opts.transitInRoute ? { home: homeXY, speedMs: tk.transitSpeedMs, clearanceM: tk.minClearanceM } : null;
   const homeElev = home ? elev(home[0], home[1]) : null;
   if (home && (homeElev == null || !Number.isFinite(homeElev))) throw new TerrainGapError(home[0], home[1]);
   if (!home) issues.push({ severity: 'info', code: 'SORTIE_NO_HOME', message: 'Sorties are timed without take-off transit and RTH because home is not set.' });
 
   const estimate = (s: number, e: number) => {
-    const r = buildRoute(plan, { startLine: s, endLine: e, speedMs: speed, fig8, fig8End: opts.fig8End });
-    for (let i = 0; i < r.wps.length - 1; i++) r.wps[i].speed = speed / factor(r.wps[i + 1].line);
+    const r = buildRoute(plan, { startLine: s, endLine: e, speedMs: speed, fig8, fig8End: opts.fig8End, transit: ferry });
+    for (let i = 0; i < r.wps.length - 1; i++) if (r.wps[i].role !== 'transit') r.wps[i].speed = speed / factor(r.wps[i + 1].line);
     return { r, t: sortieTime(r.wps, speed, homeXY, homeElev, hTopRange(s, e), tk, climbMs, descentMs, fixed) };
   };
   const fits = (s: number, e: number) => {
@@ -93,7 +95,7 @@ export function planSorties(
 
   // One sortie built exactly: its own heights, transit/RTH check and time.
   const exact = (a: number, b: number, index: number): Sortie => {
-    const route = applyHeights(plan, buildRoute(plan, { startLine: a, endLine: b, speedMs: speed, fig8, fig8End: opts.fig8End }), elev);
+    const route = applyHeights(plan, buildRoute(plan, { startLine: a, endLine: b, speedMs: speed, fig8, fig8End: opts.fig8End, transit: ferry }), elev);
     const transit = home ? planTransit(plan, route, elev, home, tk) : null;
     const hTop = Math.max(...route.wps.map(w => w.h));
     const time = sortieTime(route.wps, speed, homeXY, homeElev, hTop, tk, climbMs, descentMs, fixed);

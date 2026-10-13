@@ -38,12 +38,15 @@ DEM clip (AOI + buffer), offline basemap tiles.
   uncertainty; export refused < 30 m). `verify.ts` = independent check of the exported XML against the DEM; it may
   import ONLY types from the rest of core (a test enforces this). The web app exports only the exact files that
   passed, per sortie, never on demo terrain, and `run()` leaves no result when compute throws.
-  After changing planner maths or its tests run `npm run mutation` (breaks the planner 18 ways; every one
+  After changing planner maths or its tests run `npm run mutation` (breaks the planner 21 ways; every one
   must be caught by the suite).
 - **Figure-8** (IMU excitation) before the first line, before any resumed segment, AND after the last line
   (vendors + DJI L2/L3 manuals: align at both ends for forward/backward trajectory processing). Recording runs
   from the approach waypoint (START_RECORD) through the end figure-8 to the exit waypoint (STOP_RECORD).
   Straight level run ≥ alignStraightS (12 s) or 2.5 r before the first 8 and after the last.
+- **Transit in the route** (option, off by default): `buildRoute({ transit: { home, speedMs, clearanceM } })` adds
+  role `transit` waypoints home → approach and exit → home; approach and exit become stop turns. `toUgcsCsv()`
+  exports any route for a second look in UgCS. docs/ugcs-notes.md has the UgCS 6.1 comparison.
 - **Resume**: line where data stopped + new speed → route starts one line earlier, fresh figure-8.
   Never rely on Pilot 2 breakpoints.
 - **Sorties**: split into battery-sized routes along the same path as resume, one-line overlap.

@@ -35,6 +35,9 @@ Working now:
   is built, read back and checked against the DEM by the independent verifier first; only files that passed
   can be downloaded or published, never from the demo terrain, and only with a home point set. The RTH height
   and Max Altitude (which the file cannot carry) are in the file name and confirmed in a dialog at export.
+- **Terrain-following transit** (option under "Fly to route"): the way out and back become waypoints of the route.
+- **Sensor profiles**: L3, L2, L1 or your own (name, FOV, pulse rate); line spacing follows the FOV.
+- **UgCS CSV**: the same routes as a CSV UgCS imports, for a second look at terrain clearance in its 3D view.
 - **Terrain clearance budget** in the stats: AGL − path rounding and lag − your uncertainty allowance.
 - **DEM datum**: say whether a dropped GeoTIFF is above mean sea level or ellipsoidal.
 - Number boxes only change the plan while their value is inside its allowed range.

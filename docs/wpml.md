@@ -67,6 +67,8 @@ per-waypoint values would still be safe: `globalHeight` is the **highest** waypo
 - L3 RGB shooting runs from the first line waypoint to the **run-out** waypoint of each line and stops there, so
   the stop action (an arrival action) is never on a data-line waypoint.
 - Arrival actions on one waypoint are merged into a single `reachPoint` group, in Pilot 2's order.
+- With terrain-following transit the route starts and ends above home, and the approach and exit waypoints
+  (start and stop of recording) are written as stop turns, as the first and last waypoint are otherwise.
 
 ## Template payload parameters (L3)
 `returnMode sedecupleReturn` (16 returns), `samplingRate 350000` (Hz), `scanningMode repetitive`, `modelColoringEnable 1`.
