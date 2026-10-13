@@ -144,6 +144,14 @@ within 10 m, and the planner's figure assumes the EGM96 reading. If the aircraft
 figure, it is using the ellipsoidal reading; stop, and the writer will be changed to match before anything else is
 flown.
 
+### Resuming an interrupted job
+
+The job resumes from Pilot 2's breakpoint, as Pilot 2 does it. Three things are not yet known about that and are
+to be tested in the simulator with the SDK's breakpoint resume: whether the L3 starts recording again (the start
+action is on waypoint 1, which has been passed), whether the IMU calibration passes are flown again, and how the
+aircraft rejoins the line. Until then, when a flight resumes, check on the RC that the L3 is recording as soon as the
+route continues. The planner's "re-fly from line N" route is the fallback if it is not.
+
 ## 6. What none of this covers
 
 1. **Obstacles that are not in the DEM**: masts, power lines, cranes, turbines, new buildings, trees

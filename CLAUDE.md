@@ -47,8 +47,12 @@ DEM clip (AOI + buffer), offline basemap tiles.
 - **Transit in the route** (option, off by default): `buildRoute({ transit: { home, speedMs, clearanceM } })` adds
   role `transit` waypoints home → approach and exit → home; approach and exit become stop turns. `toUgcsCsv()`
   exports any route for a second look in UgCS. docs/ugcs-notes.md has the UgCS 6.1 comparison.
-- **Resume**: line where data stopped + new speed → route starts one line earlier, fresh figure-8.
-  Never rely on Pilot 2 breakpoints.
+- **Resume (Luke's decision, 13 Oct 2026)**: after an interruption the job resumes from Pilot 2's breakpoint, the
+  way Pilot 2 does it, not by re-flying a line. The planner's "re-fly from line N" route stays as the fallback.
+  To test on the aircraft (simulator, SDK breakpoint resume in 3DM Fly): does the L3 start recording again after
+  a breakpoint resume (the startRecord action sits on waypoint 1, already passed)? Are the calibration passes
+  flown again? What does the aircraft do at the breakpoint with no alignment manoeuvre? Until answered, a resumed
+  flight needs the L3 recording checked on the RC as soon as the route continues.
 - **Sorties**: split into battery-sized routes along the same path as resume, one-line overlap.
 - Regression test: synthetic Nimba block: 23 lines, 902 WP, 137 km. `nimba.test.ts` compares the port with the
   legacy engine on the legacy's spherical plane (`planLines(…, 'sphere')`); production uses WGS84 radii.
