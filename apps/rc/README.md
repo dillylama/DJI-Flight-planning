@@ -75,6 +75,21 @@ The first build downloads the MSDK (about 140 MB). The APK is arm64-v8a only, li
 **Close DJI Pilot 2 before starting 3DM Fly.** Running both at once can corrupt video and wayline
 state (DJI release notes). Only one app can hold the aircraft link at a time.
 
+## What the first bench session showed (13 Oct 2026)
+
+- Registration, connection (`DJI_MATRICE_400`, `DJI_RC_PLUS_2`), L3 on `PORT_1` with all LiDAR keys supported.
+- Simulator: `enableSimulator` succeeds and stays on (no issue #759 here). It switches off when the app restarts.
+  The motors do not physically spin. The aircraft is placed at 100 m above sea level wherever the simulator is set.
+- `pushKMZFileToAircraft`: 132 waypoints in about 2 s. `startMission`: refused with `GPS_INVALID` when the simulator
+  is off indoors, and with `HEIGHT_LIMIT` ("Flight route altitude exceeds limit") when any waypoint is above the
+  aircraft's Max Altitude over the take-off point. So real-height routes need `tools/make-sim-variant.ts`.
+- With a lowered copy the route started: take-off, climb at about 8 m/s to waypoint 1, 372.5 m above take-off
+  against 373.6 m expected from our EGM96 conversion, then the first arrival actions.
+- **Start now does nothing unless the simulator is on.** Flight data (position, height, velocity, waypoint, record
+  status) is logged twice a second while the motors run: `adb logcat -s 3DMFlyFD`.
+- The simulator position is remembered between launches. Text entry on the RC keyboard can stick; the values can be
+  set from the PC by writing the app's `shared_prefs/MainActivity.xml` with `run-as`.
+
 ## Safety
 
 - **Props OFF for every test in this document.** The aircraft stays on the bench.

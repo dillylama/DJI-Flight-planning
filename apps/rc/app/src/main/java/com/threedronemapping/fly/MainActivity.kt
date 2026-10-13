@@ -33,6 +33,7 @@ import dji.sdk.keyvalue.value.camera.CameraType
 import dji.sdk.keyvalue.value.common.ComponentIndexType
 import dji.sdk.keyvalue.value.common.EmptyMsg
 import dji.sdk.keyvalue.value.common.LocationCoordinate2D
+import dji.sdk.keyvalue.value.common.Velocity3D
 import dji.sdk.keyvalue.value.flightcontroller.FlightMode
 import dji.sdk.keyvalue.value.lidar.PointCloudRecordCommand
 import dji.sdk.keyvalue.value.product.ProductType
@@ -99,6 +100,31 @@ class MainActivity : Activity() {
     private var altFc: Double? = null
     private var alt3d: Double? = null
 
+    // Flight data, sampled twice a second while the motors run (real or simulated) and written to the log.
+    private var fdLat: Double? = null
+    private var fdLon: Double? = null
+    private var fdVel: Velocity3D? = null
+    private var fdRtkAlt: Double? = null
+    private var fdWp = -1
+    private var lastTakeoffAlt: Double? = null
+    private var fdState = "-"
+    private var fdRec = "-"
+    private val fdPoll = object : Runnable {
+        override fun run() {
+            try {
+                if (motorsOn == true || isFlying == true) {
+                    val v = fdVel
+                    Phase0Log.data(String.format(Locale.US,
+                        "lat=%.7f lon=%.7f alt=%.2f altFc=%.2f vn=%.2f ve=%.2f vd=%.2f rtkAlt=%s wp=%d st=%s rec=%s mode=%s fly=%s",
+                        fdLat ?: Double.NaN, fdLon ?: Double.NaN, alt3d ?: Double.NaN, altFc ?: Double.NaN,
+                        v?.x ?: Double.NaN, v?.y ?: Double.NaN, v?.z ?: Double.NaN,
+                        fdRtkAlt?.let { String.format(Locale.US, "%.2f", it) } ?: "-", fdWp, fdState, fdRec, flightModeString ?: "-", isFlying))
+                }
+            } catch (_: Throwable) {}
+            main.postDelayed(this, 500)
+        }
+    }
+
     // ---- 3 Payloads ----
     private val payloadPorts = listOf(
         ComponentIndexType.PORT_1, ComponentIndexType.PORT_2, ComponentIndexType.PORT_3,
@@ -140,12 +166,14 @@ class MainActivity : Activity() {
 
     private val missionStateListener = WaypointMissionExecuteStateListener { st ->
         Phase0Log.i("MISSION", "executeState=$st")
+        fdState = "$st"
         main.post { tvExecState.text = "$st" }
     }
     private val waylineInfoListener = object : WaylineExecutingInfoListener {
         private var lastLogged = ""
         override fun onWaylineExecutingInfoUpdate(info: WaylineExecutingInfo) {
             val s = "wayline=${info.waylineID} wp=${info.currentWaypointIndex} file=${info.missionFileName}"
+            fdWp = info.currentWaypointIndex
             if (s != lastLogged) { Phase0Log.i("MISSION", "executingInfo $s"); lastLogged = s }
             main.post { tvWaylineInfo.text = s }
         }
@@ -238,6 +266,7 @@ class MainActivity : Activity() {
         requestPermissionsIfNeeded()
         refreshMissionList()
         main.post(simPoll)
+        main.post(fdPoll)
     }
 
     override fun onResume() {
@@ -247,6 +276,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         main.removeCallbacks(simPoll)
+        main.removeCallbacks(fdPoll)
         Phase0Log.removeListener(logListener)
         Sdk.removeListener(sdkListener)
         detachListeners()
@@ -360,6 +390,12 @@ class MainActivity : Activity() {
         etSimLat = Ui.input(s6, "Latitude", "-33.2270")
         etSimLon = Ui.input(s6, "Longitude", "22.0310")
         etSimSats = Ui.input(s6, "Satellites", "12")
+        // The last position used is remembered on this RC, so it does not have to be typed again.
+        getPreferences(MODE_PRIVATE).let { sp ->
+            sp.getString("simLat", null)?.let { etSimLat.setText(it) }
+            sp.getString("simLon", null)?.let { etSimLon.setText(it) }
+            sp.getString("simSats", null)?.let { etSimSats.setText(it) }
+        }
         tvSimEnabled = Ui.kv(s6, "Simulator enabled")
         tvSimState = Ui.kv(s6, "State")
         Ui.buttons(s6, "Enable simulator" to { enableSimulator() }, "Disable simulator" to { disableSimulator() })
@@ -495,11 +531,20 @@ class MainActivity : Activity() {
         Sdk.listen(T, "KeyAircraftLocation3D", safe(T, "key") { KeyTools.createKey(FlightControllerKey.KeyAircraftLocation3D) }, h) { v ->
             if (v == null || v.latitude == null) { tvLatLon.text = "—"; return@listen }
             tvLatLon.text = String.format(Locale.US, "%.7f, %.7f", v.latitude, v.longitude)
+            fdLat = v.latitude; fdLon = v.longitude
             alt3d = v.altitude
             renderAlt()
         }
         Sdk.listen(T, "KeyAltitude", safe(T, "key") { KeyTools.createKey(FlightControllerKey.KeyAltitude) }, h) { v ->
             altFc = v; renderAlt()
+        }
+        Sdk.listen(T, "KeyAircraftVelocity", safe(T, "key") { KeyTools.createKey(FlightControllerKey.KeyAircraftVelocity) }, h) { v -> fdVel = v }
+        // What the aircraft is set to, and what it thinks its take-off height above sea level is.
+        Sdk.listen(T, "KeyHeightLimit", safe(T, "key") { KeyTools.createKey(FlightControllerKey.KeyHeightLimit) }, h) { v -> Phase0Log.i(T, "heightLimit(max altitude)=$v m") }
+        Sdk.listen(T, "KeyGoHomeHeight", safe(T, "key") { KeyTools.createKey(FlightControllerKey.KeyGoHomeHeight) }, h) { v -> Phase0Log.i(T, "goHomeHeight(RTH altitude)=$v m") }
+        Sdk.listen(T, "KeyTakeoffLocationAltitude", safe(T, "key") { KeyTools.createKey(FlightControllerKey.KeyTakeoffLocationAltitude) }, h) { v ->
+            // logged when it moves by more than a metre (it drifts by millimetres every second)
+            if (v != null && (lastTakeoffAlt == null || kotlin.math.abs(v - lastTakeoffAlt!!) > 1.0)) { Phase0Log.i(T, "takeoffLocationAltitude=${String.format(Locale.US, "%.1f", v)} m"); lastTakeoffAlt = v }
         }
         Sdk.listen(T, "KeyGPSSatelliteCount", safe(T, "key") { KeyTools.createKey(FlightControllerKey.KeyGPSSatelliteCount) }, h) { v ->
             gpsSats = v; renderGps()
@@ -515,7 +560,8 @@ class MainActivity : Activity() {
         }
         Sdk.listen(T, "RTK KeyRTKLocation", safe(T, "key") { KeyTools.createKey(RtkMobileStationKey.KeyRTKLocation) }, h) { v ->
             val sol = v?.positioningSolution?.name
-            if (sol != rtkSolution) Phase0Log.i(T, "RTK positioningSolution=$sol")
+            fdRtkAlt = v?.mobileStationLocation?.altitude
+            if (sol != rtkSolution) Phase0Log.i(T, "RTK positioningSolution=$sol mobileStationAltitude=${fdRtkAlt} m")
             rtkSolution = sol; renderRtk()
         }
         Sdk.listen(T, "Battery[0] %", safe(T, "key") { KeyTools.createKey(BatteryKey.KeyChargeRemainingInPercent, ComponentIndexType.LEFT_OR_MAIN) }, h) { v ->
@@ -659,6 +705,7 @@ class MainActivity : Activity() {
         tvEcho.text = "—"; tvSampleRate.text = "—"; tvExclusive.text = "—"
         Sdk.listen(L, "KeyPointCloudRecordStatus@$port", kStatus, lidarHolder) { v ->
             if (v != null) Phase0Log.i(L, "recordStatus=$v @$port")
+            fdRec = v?.name ?: "-"
             tvRecStatus.text = v?.name ?: "—"
             tvRecStatus.setTextColor(if (v?.name == "STARTED") Ui.GOOD else Ui.TEXT)
         }
@@ -765,6 +812,13 @@ class MainActivity : Activity() {
 
     private fun startMission() {
         val f = currentMission() ?: run { Phase0Log.w("MISSION", "no KMZ selected"); return }
+        // This is a bench build: a mission is only ever started in the simulator. If the simulator is off the
+        // aircraft would act on its real position, so Start does nothing but say so.
+        if (simEnabledLast != true) {
+            Phase0Log.e("MISSION", "NOT STARTED: the simulator is OFF. Enable it in section 6 and wait for ON, then press Start again.")
+            main.post { tvExecState.text = "NOT STARTED: simulator is OFF" }
+            return
+        }
         if (flightMode == FlightMode.GO_HOME || flightMode == FlightMode.AUTO_LANDING) {
             Phase0Log.w("MISSION", "refusing start: aircraft in $flightMode (same check as DJI sample)")
             return
@@ -805,6 +859,7 @@ class MainActivity : Activity() {
             Phase0Log.w("SIM", "invalid lat/lon/sats input: '${etSimLat.text}', '${etSimLon.text}', '${etSimSats.text}'")
             return
         }
+        getPreferences(MODE_PRIVATE).edit().putString("simLat", etSimLat.text.toString().trim()).putString("simLon", etSimLon.text.toString().trim()).putString("simSats", etSimSats.text.toString().trim()).apply()
         Phase0Log.i("SIM", "enableSimulator lat=$lat lon=$lon sats=$sats …")
         safe("SIM", "enableSimulator") {
             val settings = InitializationSettings.createInstance(LocationCoordinate2D(lat, lon), sats)

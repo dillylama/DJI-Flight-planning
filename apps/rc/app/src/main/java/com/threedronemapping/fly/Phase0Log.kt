@@ -47,6 +47,18 @@ object Phase0Log {
     fun w(section: String, msg: String) = write("W", section, msg, null)
     fun e(section: String, msg: String, t: Throwable? = null) = write("E", section, msg, t)
 
+    /**
+     * Flight data: one line per sample, to logcat (tag "3DMFlyFD") and the log file only. Not shown on screen
+     * and not kept in memory, so it can run at 2 Hz for a whole mission.
+     */
+    fun data(msg: String) {
+        val line = ts.format(Date()) + " FD " + msg
+        Log.i(TAG + "FD", line)
+        io.execute {
+            try { logFile?.let { f -> FileWriter(f, true).use { w -> w.append(line).append('\n') } } } catch (_: Throwable) {}
+        }
+    }
+
     fun snapshot(): List<String> = synchronized(lines) { lines.toList() }
 
     fun addListener(l: (String) -> Unit) { listeners.add(l) }
