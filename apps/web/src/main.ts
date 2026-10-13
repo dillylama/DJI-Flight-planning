@@ -38,7 +38,7 @@ interface Result {
 interface View { plan: Plan; route: Route; flight: Route<FlightWp> | null; transit: Transit | null; cov: Coverage | null; issues: PlanIssue[]; lastLine: number }
 type SensorKind = 'lidar' | 'photo';
 interface SurveyCfg { sensor: SensorKind; pulse: string; scan: string; fig8: boolean; camera: string; frontlap: number; shutterInv: number; sortieMin: number; sortieOverlap: number; maxWp: number | null; djiCal: boolean; rgbPhotos: boolean; fig8End: boolean; uncertaintyM: number; demDatum: VerticalDatum; transitInRoute: boolean; profile: string }
-const SURVEY_DEFAULTS: SurveyCfg = { sensor: 'lidar', pulse: '100', scan: 'linear', fig8: true, camera: 'p1-35', frontlap: 80, shutterInv: 1000, sortieMin: M400_LIMITS.sortieMinDefault, sortieOverlap: 0, maxWp: null, djiCal: true, rgbPhotos: true, fig8End: true, uncertaintyM: SAFETY.uncertaintyDefaultM, demDatum: 'orthometric', transitInRoute: false, profile: 'l3' };
+const SURVEY_DEFAULTS: SurveyCfg = { sensor: 'lidar', pulse: '100', scan: 'linear', fig8: false, camera: 'p1-35', frontlap: 80, shutterInv: 1000, sortieMin: M400_LIMITS.sortieMinDefault, sortieOverlap: 0, maxWp: null, djiCal: true, rgbPhotos: true, fig8End: false, uncertaintyM: SAFETY.uncertaintyDefaultM, demDatum: 'orthometric', transitInRoute: false, profile: 'l3' };
 // LiDAR sensor profiles: a name, the across-track field of view used for line spacing, and the pulse rate used
 // for the density estimate. Route files are only written for the Zenmuse L3 (the one whose values were copied
 // from Pilot 2 exports); the others are for planning. Your own profiles are kept in this browser.
