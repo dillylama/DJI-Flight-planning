@@ -128,7 +128,9 @@ simulator, props off, with the flight data logged twice a second:
   below a straight leg (budgeted: 5 m);
 - slowed legs flown at or just under the file's speeds; climb up to 4.4 m/s for a moment and 3.5 m/s sustained,
   descent up to 3.2 m/s, against the 4 / 3 m/s the plan assumes;
-- near stop-and-turn at every line end (Pilot 2's 10 m damping), at the planned height;
+- line ends: with the fly-through mode the aircraft slowed to about 3 m/s and pivoted at the corner, whatever the
+  damping; with DJI's `coordinateTurn` at the corners (now the default) it flew them at 6–7 m/s on a 10 m/s route,
+  passing 4–6 m inside the corner with 20 m damping. The rounded turn stays inside the terrain corridor (checked);
 - recording starts after the calibration passes on waypoint 1 and stops on the last waypoint; the aircraft
   refuses a route above its Max Altitude before take-off; it returns home when the route ends, and when RTH is
   pressed it ends the route, stops the recording itself and flies home at its current height (above the RTH setting).

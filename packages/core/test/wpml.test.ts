@@ -122,7 +122,11 @@ test('straight legs by default; first and last waypoint are stop turns; fallback
   assert.ok(w.waypoints.every(p => p.straight === 1) && t.waypoints.every(p => p.straight === 1), 'useStraightLine 1 everywhere');
   assert.ok(files.templateKml.includes('<wpml:globalUseStraightLine>1</wpml:globalUseStraightLine>'));
   for (const i of [0, n - 1]) { assert.equal(w.waypoints[i].turnMode, 'toPointAndStopWithDiscontinuityCurvature'); assert.equal(w.waypoints[i].damping, 0); }
-  for (let i = 1; i < n - 1; i++) { assert.equal(w.waypoints[i].turnMode, 'toPointAndPassWithContinuityCurvature'); assert.ok(w.waypoints[i].damping > 0); }
+  for (let i = 1; i < n - 1; i++) {
+    const corner = (route.wps[i].role === 'runout' && route.wps[i + 1].role === 'runin') || (route.wps[i].role === 'runin' && route.wps[i - 1].role === 'runout');
+    assert.equal(w.waypoints[i].turnMode, corner ? 'coordinateTurn' : 'toPointAndPassWithContinuityCurvature', `waypoint ${i + 1}`);
+    assert.ok(w.waypoints[i].damping > 0);
+  }
   // every waypoint carries its own height and speed in the template, and the global height is the HIGHEST one
   // as Pilot 2 writes per-waypoint values: the value itself, with no "use global" flags
   assert.ok(!/useGlobalHeight|useGlobalSpeed|useGlobalTurnParam/.test(files.templateKml));

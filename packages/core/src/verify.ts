@@ -281,7 +281,7 @@ export function verifyRouteFiles(templateKml: string, waylinesWpml: string, opts
   const vLo = (j: number) => Math.min(P[j].speed, P[j + 1].speed, j > 0 ? P[j - 1].speed : Infinity);
   for (let i = 1; i < n - 1; i++) {
     if (STOP_MODES.includes(P[i].turnMode) || legLen[i - 1] < 2 || legLen[i] < 2) continue;
-    if (P[i].turnMode === 'toPointAndPassWithContinuityCurvature' && !(P[i].damping > 0)) err('V_DAMPING', `Waypoint ${i + 1} is a fly-through turn with no damping distance.`, [i]);
+    if ((P[i].turnMode === 'toPointAndPassWithContinuityCurvature' || P[i].turnMode === 'coordinateTurn') && !(P[i].damping > 0)) err('V_DAMPING', `Waypoint ${i + 1} is a fly-through turn with no damping distance.`, [i]);
     const g0 = legDh[i - 1] / legLen[i - 1], g1 = legDh[i] / legLen[i];
     const rounding = P[i].damping * Math.tan(Math.abs(Math.atan(g1) - Math.atan(g0)) / 2);
     const heading = Math.abs(Math.atan2(legDx[i - 1] * legDy[i] - legDy[i - 1] * legDx[i], legDx[i - 1] * legDx[i] + legDy[i - 1] * legDy[i]));

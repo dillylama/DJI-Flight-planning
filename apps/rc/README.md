@@ -98,6 +98,9 @@ state (DJI release notes). Only one app can hold the aircraft link at a time.
 - **Height reference:** runs 2 and 3 held `executeHeight` (ellipsoidal) minus the simulator's 100 m take-off
   altitude (−1.4 m); run 1 held 32 m less, i.e. the EGM96 height minus 100 m. Same file, same simulator position.
   Not explained; the real-flight check "height at waypoint 1 matches the planner" covers it (docs/safety.md).
+- **Corners (runs 4 and 5, 13 Oct):** a 6-line route at 10 m/s. Fly-through corners: 2.6–3.7 m/s, pivoting at the
+  corner, with 20 m damping as with 10 m. `coordinateTurn` corners: 6.2–7.3 m/s, passing 4–6 m inside the corner.
+  The M400 accepts `coordinateTurn`. **Confirm landing** works (`KeyConfirmLanding`).
 - The simulated landing hovers at 0.5 m and the RC beeps until the landing is confirmed: **Confirm landing** button.
 - The simulator position is remembered between launches. Text entry on the RC keyboard can stick; the values can be
   set from the PC by writing the app's `shared_prefs/MainActivity.xml` with `run-as`.

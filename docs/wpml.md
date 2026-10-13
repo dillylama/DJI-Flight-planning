@@ -33,6 +33,12 @@ The waypoint sample was saved with `useStraightLine 0`: the whole path between w
 (DJI: "the whole trajectory of the segment is curved"), and nothing in the file bounds how far it strays from
 the straight legs. Pilot 2's own L3 area route flies `useStraightLine 1` with stop turns at the line ends.
 
+**Corners between lines are `coordinateTurn`** (13 Oct 2026, M400 simulator): with 20 m damping on a 10 m/s route
+the aircraft flew the 90° corners at 6–7 m/s, passing 4–6 m inside the corner. The fly-through mode slowed to about
+3 m/s and pivoted at the corner, with 10 m or 20 m damping alike. Damping at a corner is the turn radius at
+`turnBankDeg` (20°) for the speed flown in, held to a third of the shorter adjacent leg and 60 m. Whether Pilot 2
+keeps `coordinateTurn` on import is not yet checked (next RC session: import a planner route and re-export it).
+
 **Our routes write `useStraightLine 1`** on every waypoint and in `globalUseStraightLine`: straight legs,
 rounded over the turn damping distance at each fly-through waypoint (DJI requires the damping for that
 combination). Terrain clearance is computed for exactly that shape. Damping per waypoint is 40 % of the shorter
