@@ -72,7 +72,7 @@
 <div class="wrap">
 <header>
   <h1><span class="mark">3DM</span>M400 + Zenmuse L3 mission system</h1>
-  <span class="updated" id="updated">Updated 13 Oct 2026, 14:47 SAST</span>
+  <span class="updated" id="updated">Updated 13 Oct 2026, 14:52 SAST</span>
 </header>
 
 <div class="status-row">
@@ -80,7 +80,7 @@
   <div class="tile"><div class="k">Tests</div><div class="v">85</div><div class="s">core 70 + API 15, all passing</div></div>
   <div class="tile"><div class="k">Live planner</div><div class="v">Current</div><div class="s"><a href="https://planner.3dronemapping.com">planner.3dronemapping.com</a>, deployed 13 Oct</div></div>
   <div class="tile"><div class="k">Flights flown</div><div class="v">0</div><div class="s">nothing imported or flown yet</div></div>
-  <div class="tile"><div class="k">Next gate</div><div class="v">G1</div><div class="s">test-01 and speeds passed; waypoint cap to go</div></div>
+  <div class="tile"><div class="k">Next gate</div><div class="v">G2</div><div class="s">G1 passed 13 Oct; simulator bench test next</div></div>
 </div>
 
 <div class="banner"><b>Safety status:</b> the review's fixes and the independent file check are live on planner.3dronemapping.com since 13 Oct. The test files are on the RC and gate G1 (Pilot 2 import) is under way. Nothing has been flown, so how the aircraft handles these files is still unproven. Routes are for the gates only until G1 to G3 pass.</div>
@@ -147,10 +147,10 @@
     </div>
   </div>
 
-  <div class="step now">
-    <div class="when"><b>Next</b>needs the RC</div>
+  <div class="step">
+    <div class="when"><b>13 Oct</b>passed</div>
     <div>
-      <span class="pill luke">Luke</span> <span class="gate">GATE G1</span> <h3>Pilot 2 import test (no aircraft, no props)</h3>
+      <span class="pill done">Passed</span> <span class="gate">GATE G1</span> <h3>Pilot 2 import test (no aircraft, no props)</h3>
       <ul>
         <li>Copy the eight <span class="m">.kmz</span> files from <span class="m">C:\Claude\M400\samples\generated\</span> to the RC and import them in Pilot 2. The steps are in the README in that folder.</li>
         <li><b>test-01:</b> does it import, draw in the right place, and show the L3 actions? Note the height Pilot 2 shows for waypoint 1 and the highest waypoint, the speed, and whether legs are drawn straight.</li>
@@ -160,12 +160,13 @@
       </ul>
       <div class="pass"><b>13 Oct, test-01: passed.</b> Pilot 2 kept every position, height (both datums, 0.000 m difference), waypoint speed, turn mode and the straight legs, and start and stop of recording. It shortened the turn damping to a third of the leg (10 m at most), removed the IMU calibration actions and the start group, and turned continuous shooting into "take photo" on distance. The writer now writes routes that way, so ours and Pilot 2's executed file match.</div>
       <div class="pass"><b>13 Oct, speeds: passed.</b> test-02 shows 15 m/s and test-03 shows 17 m/s, no messages (Pilot 2 allows 1–25 m/s per waypoint on the M400). <b>IMU Calibration switch:</b> an export with it on shows Pilot 2 writing the same calibration actions we first wrote, driven by one flag in the template. The writer now does it that way.</div>
+      <div class="pass"><b>13 Oct, waypoint cap:</b> 268, 538 and 1,040 waypoints open in Pilot 2 (1,040 is slow to edit); 2,013 crashes it. The planner now cuts sorties at 1,000 waypoints.</div>
       <div class="pass"><b>Pass:</b> the re-export matches ours (heights within 0.1 m; speeds, turn settings and actions unchanged) and a cap number is known. <b>Fail:</b> any rejection, clamped speed or changed value. Then the writer is adjusted and the test repeated.</div>
     </div>
   </div>
 
-  <div class="step">
-    <div class="when"><b>After G1</b>RC + M400, props off</div>
+  <div class="step now">
+    <div class="when"><b>Next</b>RC + M400, props off</div>
     <div>
       <span class="pill luke">Luke</span> <span class="gate">GATE G2</span> <h3>Bench test in the DJI simulator</h3>
       <ul>
@@ -222,7 +223,7 @@
 
       <li>How the aircraft slows for the 90° turns between lines, now that turn damping is 10 m at most.</li>
       <li>How does the M400 round a fly-through waypoint on straight legs, and how closely does it hold a steep leg?</li>
-      <li>The waypoint cap, and L3 recording started from a waypoint action.</li>
+      <li>Whether the aircraft accepts a route of about 1,000 waypoints on upload, and L3 recording started from a waypoint action.</li>
     </ul>
   </div>
   <div class="card">
@@ -253,7 +254,8 @@
   <div class="card">
     <h3>Needs Luke</h3>
     <ul>
-      <li>G1: import, re-export test-01, speeds, waypoint cap.</li>
+      <li>G2: simulator bench test with the RC and the M400, props off.</li>
+      <li>If the RC firmware is updated: re-export test-01 once afterwards, to check Pilot 2 still writes routes the same way.</li>
       <li>Decide: on signal loss, return home (as now) or continue the route? "Continue" needs a Pilot 2 export with that option, to copy its exact spelling.</li>
       <li>Two more Pilot 2 exports would remove guesswork: a waypoint route with a speed and height change and an action on one waypoint, and an L3 area route with terrain follow on.</li>
       <li>Decide on Cloudflare Access (email sign-in) for the office side of the planner.</li>
@@ -284,6 +286,7 @@
 
 <h2>Change log</h2>
 <div class="log">
+  <p><span class="d">13 Oct 14:52</span> Gate G1 passed. Waypoint cap found (1,040 opens, 2,013 crashes Pilot 2); planner cuts sorties at 1,000. IMU calibration written as Pilot 2's switch writes it. All of it live.</p>
   <p><span class="d">13 Oct 14:47</span> G1: speeds passed (15 and 17 m/s kept). Pilot 2's IMU Calibration switch decoded from a second export and written the same way. Left in G1: the waypoint-cap files.</p>
   <p><span class="d">13 Oct 14:37</span> G1, test-01: imported, saved and exported from Pilot 2, compared. Heights, speeds and geometry kept exactly. Writer aligned with what Pilot 2 wrote back (damping, photos, calibration). Still to do in G1: speeds on test-02 and test-03, waypoint cap.</p>
   <p><span class="d">13 Oct 14:14</span> PR 9 and PR 10 merged and deployed. Test files imported on the RC; G1 started.</p>
