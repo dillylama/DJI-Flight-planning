@@ -103,6 +103,7 @@ const profile = () => profiles().find(p => p.id === state.survey.profile) ?? BUI
 const isL3 = () => profile().id === 'l3';
 const lidarKhz = () => profile().khz ?? pulse().khz;
 const isPhoto = () => state.survey.sensor === 'photo';
+const wpCap = () => state.survey.maxWp ?? M400_LIMITS.maxWaypoints;   // empty box = the cap found on the RC
 
 // ── Layout ────────────────────────────────────────────────────────
 type Field<K> = { key: K; label: string; unit: string; step: number; min: number; max: number; only?: SensorKind; vmode?: 'slow' | 'raise' };
@@ -234,7 +235,7 @@ app.innerHTML = `
         <select id="flyToMode"><option value="safely">Safely: climb, then fly level</option><option value="pointToPoint">Point to point: climb, then slope</option><option value="route">Follow terrain: transit and return are waypoints of the route</option></select></label>
       <label class="span2"><span class="lt">Usable time per battery set <em>min</em><i class="ti" tabindex="0" data-tip="Planning endurance per sortie, landing reserve already removed. DJI quotes 59 min flight / 53 min hover for the M400 with the light H30T only; there is no official figure with the 1.75 kg L3." data-rec="${M400_LIMITS.sortieMinDefault} min with L3 until you have your own logs.">i</i></span><input type="number" id="sortieIn" step="1" min="5" max="50" /></label>
       <label><span class="lt">Lines re-flown <em>per split</em>${ti('sortieOverlap')}</span><input type="number" id="overlapIn" step="1" min="0" max="2" /></label>
-      <label><span class="lt">Max WPs per route${ti('maxWp')}</span><input type="number" id="maxWpIn" step="50" min="50" placeholder="unknown" /></label>
+      <label><span class="lt">Max WPs per route${ti('maxWp')}</span><input type="number" id="maxWpIn" step="50" min="50" placeholder="${M400_LIMITS.maxWaypoints}" /></label>
     </div>
     <div class="sensor-note">M400 limits used (conservative): line speed ≤ ${M400_LIMITS.lineSpeedWarnMs} m/s (max ${M400_SPEC.maxHorizontalMs}), climb ≤ ${M400_LIMITS.climbWarnMs} m/s (max ${M400_SPEC.maxAscentMs}), descent ≤ ${M400_LIMITS.descentWarnMs} m/s (max ${M400_SPEC.maxDescentMs}), wind limit ${M400_SPEC.maxWindMs} m/s.</div>
   </section>
@@ -642,7 +643,8 @@ function compute(): Result | null {
     return r;
   }
   r.st = stats(plan, r.flight);
-  r.issues = validate(plan, r.flight).filter(i => !(isPhoto() && i.code === 'FIG8'));
+  // The whole job is only a planning view: the cap applies to each sortie's route, which is what is flown.
+  r.issues = validate(plan, r.flight).filter(i => !(isPhoto() && i.code === 'FIG8') && i.code !== 'WP_CAP_UNKNOWN');
   r.cov = coverage(plan, r.flight);
   if (state.dem.synthetic) r.issues.push({ severity: 'error', code: 'DEMO_TERRAIN', message: 'Demo terrain is made up: this plan is a preview only and cannot be exported or published. Load your own block and fetch GLO-30 (or drop a DEM) to plan a real flight.' });
   const clr = T('minClearanceM'), unc = state.survey.uncertaintyM;
@@ -682,7 +684,7 @@ function compute(): Result | null {
     r.sp = planSorties(plan, state.dem.elev, state.home, state.takeoff, {
       usableMin: state.survey.sortieMin, firstLine: route.startIdx, speedMs: route.speedMs, fig8: !isPhoto() && state.survey.fig8,
       fig8End: !isPhoto() && state.survey.fig8 && state.survey.fig8End,
-      overlapLines: state.survey.sortieOverlap, maxWaypoints: state.survey.maxWp,
+      overlapLines: state.survey.sortieOverlap, maxWaypoints: wpCap(),
       climbMs: P('climbMs'), descentMs: P('descentMs'), full: r.flight, transitInRoute: state.survey.transitInRoute,
     });
     r.issues.push(...r.sp.issues);
@@ -691,7 +693,7 @@ function compute(): Result | null {
     if (r.sp.sorties.length > 1) for (const so of r.sp.sorties) {
       const tag = `Sortie ${so.index + 1}: `;
       const own = [
-        ...validate(plan, so.route, { maxWaypoints: state.survey.maxWp }),
+        ...validate(plan, so.route, { maxWaypoints: wpCap() }),
         ...checkLimits(plan, so.route, { ...limitCtx, totalMin: so.time.total, topAboveHomeM: so.transit?.topAboveHomeM }),
         ...safetyChecks(plan, so.route, { uncertaintyM: unc, minClearanceM: clr }),
       ].filter(i => i.severity !== 'info' && PER_ROUTE.has(i.code));

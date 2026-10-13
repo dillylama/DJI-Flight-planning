@@ -25,6 +25,9 @@ export const M400_LIMITS = {
   bankWarnDeg: 25, bankMaxDeg: 30,                 // max pitch 35°
   windNoteMs: 12,
   sortieMinDefault: 30,                            // usable minutes per battery set with L3 (no official figure)
+  // Waypoints per route. Import test on the RC Plus 2, 13 Oct 2026: 1,040 waypoints opened and could be edited
+  // (slowly); 2,013 crashed Pilot 2. Whether the aircraft accepts 1,000 on upload is still to be seen (gate G2).
+  maxWaypoints: 1000,
 };
 
 // ── Zenmuse L3 ──────────────────────────────────────────────────
