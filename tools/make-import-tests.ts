@@ -76,7 +76,7 @@ await emit('test-03-speed-17.kmz', rect(600, 400), { ...small, speedMs: 17 }, 'S
 // 3. Waypoint-cap probes: square blocks with 50 m waypoint spacing, sized to reach each count. The gradient-limited
 //    profile is used so that a big block over steep ground always gives a valid route (these are import probes).
 const cap: Partial<PlanOptions> = { aglM: 100, speedMs: 10, courseDeg: 0, wpSpacingM: 50, verticalMode: 'raise' };
-for (const target of [250, 500, 1000, 2000, 5000]) {
+for (const target of [250, 500, 1000, 1250, 1500, 2000, 5000]) {
   const side = sideFor(target, cap);
   await emit(`test-cap-${String(target).padStart(4, '0')}.kmz`, rect(side, side), cap, `Waypoint-cap probe (≥ ${target}). Import only: does Pilot 2 accept it?`);
 }
