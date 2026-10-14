@@ -138,7 +138,7 @@ simulator, props off, with the flight data logged twice a second:
 **Height reference, settled on the first live flight (14 Oct 2026).** In the simulator the aircraft had held our
 heights as ellipsoidal in two runs and as EGM96 in one (32 m apart, same file). On the live flight at the home
 block (G3) the RC showed 186 m above take-off at waypoint 1 against the planner's 186 m, which assumes the EGM96
-reading. So in flight the aircraft converts our ellipsoidal  to height above the take-off point the
+reading. So in flight the aircraft converts our ellipsoidal `executeHeight` to height above the take-off point the
 same way we and Pilot 2 do; the two simulator runs that said otherwise were the simulator mixing a made-up position
 with real receiver data. The waypoint-1 check stays in the pre-flight list; it costs nothing.
 

@@ -93,7 +93,6 @@ DEM clip (AOI + buffer), offline basemap tiles.
   the file, limits held, L3 start/stop, RTH mid-route. Height reference settled on the first live flight (G3, 14 Oct 2026): 186 m at
   waypoint 1 vs 186 m planned, so the aircraft reads our heights as EGM96/above take-off as we assume. Open: upload
   of ~1,000 waypoints to the aircraft.
-  (samples/generated/test-cap-*.kmz), actions in Pilot 2 waypoint UI, fly-through rounding with useStraightLine 1.
 - The route file carries neither RTH height nor Max Altitude: the planner shows both per sortie, tags the file
   name (`_RTH330_ALT430`) and makes the pilot confirm them at export.
 
