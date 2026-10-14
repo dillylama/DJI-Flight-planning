@@ -58,7 +58,7 @@ try {
 const profiles = () => [...BUILTIN_PROFILES, ...customProfiles];
 const DEMO_DEM: Dem = { name: 'Synthetic ridge (demo)', elev: demoElev, synthetic: true, source: 'demo', datum: 'orthometric', gaps: 0 };
 const LAYERS = [
-  ['aoi', 'Block outline'], ['lines', 'Data lines'], ['turns', 'Run-in/out & turns'], ['fig8', 'Figure-8 & approach'],
+  ['aoi', 'Block outline'], ['lines', 'Data lines'], ['turns', 'Run-in/out & turns'], ['fig8', 'Approach & exit'],
   ['wps', 'Waypoints'], ['rec', 'Record start/stop'], ['swath', 'Swath / photo footprint'], ['overlaps', 'Strip overlaps'], ['drops', 'Drop lines to terrain (3D)'],
   ['transit', 'Take-off transit'], ['rth', 'RTH path'],
 ] as const;
@@ -106,23 +106,23 @@ const isPhoto = () => state.survey.sensor === 'photo';
 const wpCap = () => state.survey.maxWp ?? M400_LIMITS.maxWaypoints;   // empty box = the cap found on the RC
 
 // ── Layout ────────────────────────────────────────────────────────
-type Field<K> = { key: K; label: string; unit: string; step: number; min: number; max: number; only?: SensorKind; vmode?: 'slow' | 'raise' };
+type Field<K> = { key: K; label: string; unit: string; step: number; min: number; max: number; only?: SensorKind; vmode?: 'slow' | 'raise'; adv?: boolean };
+// The everyday settings stay in view; `adv` ones live under "Advanced" and keep their defaults unless changed.
 const FIELDS: Field<keyof PlanOptions>[] = [
   { key: 'aglM', label: 'AGL', unit: 'm', step: 10, min: SAFETY.aglMinM, max: 1000 },
   { key: 'speedMs', label: 'Line speed', unit: 'm/s', step: 0.5, min: 1, max: M400_LIMITS.lineSpeedMaxMs },
-  { key: 'fovDeg', label: 'FOV used', unit: '°', step: 1, min: 10, max: 120, only: 'lidar' },
   { key: 'sidelapPct', label: 'Sidelap', unit: '%', step: 5, min: 0, max: 90 },
   { key: 'courseDeg', label: 'Line course', unit: '°', step: 1, min: 0, max: 359 },
-  { key: 'runInM', label: 'Run-in', unit: 'm', step: 10, min: 20, max: 1000 },
-  { key: 'runOutM', label: 'Run-out', unit: 'm', step: 10, min: 20, max: 1000 },
-  { key: 'wpSpacingM', label: 'Max WP spacing', unit: 'm', step: 10, min: 20, max: 1000 },
   { key: 'thinToleranceM', label: 'Thinning tolerance', unit: 'm', step: 5, min: 0, max: 200 },
-  { key: 'corridorM', label: 'Terrain corridor ±', unit: 'm', step: 5, min: SAFETY.corridorMinM, max: 500 },
-  { key: 'climbMs', label: 'Max climb rate', unit: 'm/s', step: 0.5, min: 0.5, max: M400_LIMITS.climbMaxMs, vmode: 'slow' },
-  { key: 'descentMs', label: 'Max descent rate', unit: 'm/s', step: 0.5, min: 0.5, max: M400_LIMITS.descentMaxMs, vmode: 'slow' },
-  { key: 'maxGradient', label: 'Max gradient', unit: 'rise/run', step: 0.01, min: 0.01, max: 0.5, vmode: 'raise' },
-  { key: 'fig8BankDeg', label: 'Figure-8 bank', unit: '°', step: 1, min: 5, max: M400_LIMITS.bankMaxDeg, only: 'lidar' },
-  { key: 'turnBankDeg', label: 'Line-end turn bank', unit: '°', step: 1, min: 5, max: M400_LIMITS.bankMaxDeg },
+  { key: 'fovDeg', label: 'FOV used', unit: '°', step: 1, min: 10, max: 120, only: 'lidar', adv: true },
+  { key: 'runInM', label: 'Run-in', unit: 'm', step: 10, min: 20, max: 1000, adv: true },
+  { key: 'runOutM', label: 'Run-out', unit: 'm', step: 10, min: 20, max: 1000, adv: true },
+  { key: 'wpSpacingM', label: 'Max WP spacing', unit: 'm', step: 10, min: 20, max: 1000, adv: true },
+  { key: 'corridorM', label: 'Terrain corridor ±', unit: 'm', step: 5, min: SAFETY.corridorMinM, max: 500, adv: true },
+  { key: 'climbMs', label: 'Max climb rate', unit: 'm/s', step: 0.5, min: 0.5, max: M400_LIMITS.climbMaxMs, vmode: 'slow', adv: true },
+  { key: 'descentMs', label: 'Max descent rate', unit: 'm/s', step: 0.5, min: 0.5, max: M400_LIMITS.descentMaxMs, vmode: 'slow', adv: true },
+  { key: 'maxGradient', label: 'Max gradient', unit: 'rise/run', step: 0.01, min: 0.01, max: 0.5, vmode: 'raise', adv: true },
+  { key: 'turnBankDeg', label: 'Line-end turn bank', unit: '°', step: 1, min: 5, max: M400_LIMITS.bankMaxDeg, adv: true },
 ];
 const TK_FIELDS: Field<'takeoffSecurityM' | 'transitSpeedMs' | 'minClearanceM'>[] = [
   { key: 'takeoffSecurityM', label: 'Take-off security height', unit: 'm', step: 5, min: 2, max: 1500 },
@@ -158,6 +158,16 @@ const btnTip = (k: string) => TIPS[k] ? ` data-tip="${esc(TIPS[k].t)}"` : '';
 const fieldHtml = (f: Field<string>, group: string) =>
   `<label${f.only ? ` data-only="${f.only}"` : ''}${f.vmode ? ` data-vmode="${f.vmode}"` : ''}><span class="lt">${f.label} <em>${f.unit}</em>${ti(f.key)}</span><input type="number" data-group="${group}" data-key="${f.key}" step="${f.step}" min="${f.min}" max="${f.max}" /></label>`;
 const opt = (v: string, label: string) => `<option value="${v}">${label}</option>`;
+
+// Base maps: free raster tile services that need no key. The choice is remembered in this browser.
+const BASEMAPS = [
+  { id: 'sat', name: 'Satellite (Esri)', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], maxzoom: 19, attribution: 'Imagery © Esri, Maxar, Earthstar Geographics', dim: true },
+  { id: 'osm', name: 'Streets (OpenStreetMap)', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], maxzoom: 19, attribution: '© OpenStreetMap contributors', dim: false },
+  { id: 'otm', name: 'Topographic (OpenTopoMap)', tiles: ['https://a.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://b.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://c.tile.opentopomap.org/{z}/{x}/{y}.png'], maxzoom: 17, attribution: '© OpenStreetMap contributors, SRTM · © OpenTopoMap (CC-BY-SA)', dim: false },
+  { id: 'esritopo', name: 'Topographic (Esri)', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}'], maxzoom: 19, attribution: '© Esri, HERE, Garmin, FAO, NOAA, USGS', dim: false },
+] as const;
+const BASEMAP_STORE = '3dm.basemap';
+let basemap: string = (() => { try { const v = localStorage.getItem(BASEMAP_STORE); return BASEMAPS.some(b => b.id === v) ? v! : 'sat'; } catch { return 'sat'; } })();
 
 const app = document.getElementById('app')!;
 app.innerHTML = `
@@ -205,8 +215,6 @@ app.innerHTML = `
       </details>
       <label data-l3><span class="lt">Pulse rate ${ti('lidarMode')}</span><select id="pulseSel">${L3_PULSE.map(p => opt(p.id, `${p.khz} kHz · AGL < ${p.maxAglM} m`)).join('')}</select></label>
       <label data-l3><span class="lt">Scan mode</span><select id="scanSel">${L3_SCAN.map(s => opt(s.id, `${s.name} ${s.fovH}°×${s.fovV}°`)).join('')}</select></label>
-      <label class="check span2"><input type="checkbox" id="fig8On" /> IMU figure-8 before lines and resumes</label>
-      <label class="check span2"><input type="checkbox" id="fig8EndOn" /> IMU figure-8 at the end too ${ti('fig8End')}</label>
       <label class="check span2" data-l3><input type="checkbox" id="djiCalOn" /> DJI IMU calibration at start and end ${ti('djiCal')}</label>
       <label class="check span2" data-l3><input type="checkbox" id="rgbOn" /> L3 RGB photos on data lines ${ti('rgbPhotos')}</label>
     </div>
@@ -220,37 +228,43 @@ app.innerHTML = `
   </section>
   <section>
     <h2>Flight</h2>
-    <div class="fields" id="fields">${FIELDS.map(f => fieldHtml(f, 'plan')).join('')}
-      <label><span class="lt">Terrain + position uncertainty <em>m</em>${ti('uncertaintyM')}</span><input type="number" id="uncIn" step="5" min="${SAFETY.uncertaintyMinM}" max="${UNC_MAX}" /></label>
+    <div class="fields" id="fields">${FIELDS.filter(f => !f.adv).map(f => fieldHtml(f, 'plan')).join('')}
       <label class="span2"><span class="lt">Vertical profile ${ti('verticalMode')}</span>
         <select id="vmodeSel"><option value="slow">Follow terrain; slow down to the climb/descent limits</option><option value="raise">Keep line speed; raise waypoints (gradient limit)</option></select></label>
+      <details class="span2 adv"><summary>Advanced</summary><div class="fields">
+        ${FIELDS.filter(f => f.adv).map(f => fieldHtml(f, 'plan')).join('')}
+        <label><span class="lt">Terrain + position uncertainty <em>m</em>${ti('uncertaintyM')}</span><input type="number" id="uncIn" step="5" min="${SAFETY.uncertaintyMinM}" max="${UNC_MAX}" /></label>
+      </div></details>
     </div>
     <div class="row"><button id="optCourse" class="ghost" disabled${btnTip('optCourse')}>Optimise course</button><button id="resetParams" class="link">Reset defaults</button></div>
   </section>
   <section>
-    <h2>Home, take-off &amp; aircraft</h2>
+    <h2>Home &amp; aircraft</h2>
     <div class="row"><button id="setHome" class="ghost"${btnTip('setHome')}>Set home on map</button><span class="note inline" id="homeInfo">Not set</span></div>
     <div class="fields" style="margin-top:10px">
-      ${TK_FIELDS.map(f => fieldHtml(f, 'takeoff')).join('')}
       <label><span class="lt">RTH height <em>m</em>${ti('rthHeightM')}</span><input type="number" id="rthHeight" step="10" min="${RTH_MIN}" max="${RTH_MAX}" placeholder="auto" /></label>
-      <label class="span2"><span class="lt">Fly to route ${ti('flyToMode')}</span>
-        <select id="flyToMode"><option value="safely">Safely: climb, then fly level</option><option value="pointToPoint">Point to point: climb, then slope</option><option value="route">Follow terrain: transit and return are waypoints of the route</option></select></label>
-      <label class="span2"><span class="lt">Usable time per battery set <em>min</em><i class="ti" tabindex="0" data-tip="Planning endurance per sortie, landing reserve already removed. DJI quotes 59 min flight / 53 min hover for the M400 with the light H30T only; there is no official figure with the 1.75 kg L3." data-rec="${M400_LIMITS.sortieMinDefault} min with L3 until you have your own logs.">i</i></span><input type="number" id="sortieIn" step="1" min="5" max="50" /></label>
-      <label><span class="lt">Lines re-flown <em>per split</em>${ti('sortieOverlap')}</span><input type="number" id="overlapIn" step="1" min="0" max="2" /></label>
-      <label><span class="lt">Max WPs per route${ti('maxWp')}</span><input type="number" id="maxWpIn" step="50" min="50" placeholder="${M400_LIMITS.maxWaypoints}" /></label>
+      <label><span class="lt">Usable time per battery <em>min</em><i class="ti" tabindex="0" data-tip="Planning endurance per battery set, landing reserve already removed, used only to estimate how many batteries a job takes. DJI quotes 59 min flight / 53 min hover for the M400 with the light H30T only; there is no official figure with the 1.75 kg L3." data-rec="${M400_LIMITS.sortieMinDefault} min with L3 until you have your own logs.">i</i></span><input type="number" id="sortieIn" step="1" min="5" max="50" /></label>
+      <details class="span2 adv"><summary>Advanced</summary><div class="fields">
+        ${TK_FIELDS.map(f => fieldHtml(f, 'takeoff')).join('')}
+        <label class="span2"><span class="lt">Fly to route ${ti('flyToMode')}</span>
+          <select id="flyToMode"><option value="safely">Safely: climb, then fly level</option><option value="pointToPoint">Point to point: climb, then slope</option><option value="route">Follow terrain: transit and return are waypoints of the route</option></select></label>
+        <label><span class="lt">Lines re-flown <em>per split</em>${ti('sortieOverlap')}</span><input type="number" id="overlapIn" step="1" min="0" max="2" /></label>
+        <label><span class="lt">Max WPs per route${ti('maxWp')}</span><input type="number" id="maxWpIn" step="50" min="50" placeholder="${M400_LIMITS.maxWaypoints}" /></label>
+        <div class="sensor-note span2">M400 limits used (conservative): line speed ≤ ${M400_LIMITS.lineSpeedWarnMs} m/s (max ${M400_SPEC.maxHorizontalMs}), climb ≤ ${M400_LIMITS.climbWarnMs} m/s (max ${M400_SPEC.maxAscentMs}), descent ≤ ${M400_LIMITS.descentWarnMs} m/s (max ${M400_SPEC.maxDescentMs}), wind limit ${M400_SPEC.maxWindMs} m/s.</div>
+      </div></details>
     </div>
-    <div class="sensor-note">M400 limits used (conservative): line speed ≤ ${M400_LIMITS.lineSpeedWarnMs} m/s (max ${M400_SPEC.maxHorizontalMs}), climb ≤ ${M400_LIMITS.climbWarnMs} m/s (max ${M400_SPEC.maxAscentMs}), descent ≤ ${M400_LIMITS.descentWarnMs} m/s (max ${M400_SPEC.maxDescentMs}), wind limit ${M400_SPEC.maxWindMs} m/s.</div>
   </section>
   <section>
-    <h2>Resume</h2>
-    <label class="check"><input type="checkbox" id="resOn" /> Build a resume route ${ti('resOn')}</label>
+    <h2>Continue from a line</h2>
+    <label class="check"><input type="checkbox" id="resOn" /> Build a route that starts at a line ${ti('resOn')}</label>
     <div class="fields">
       <label><span class="lt">Data stopped on line ${ti('resLine')}</span><input type="number" id="resLine" min="1" value="1" /></label>
       <label><span class="lt">New speed <em>m/s</em>${ti('resSpeed')}</span><input type="number" id="resSpeed" step="0.5" min="1" max="20" value="14" /></label>
     </div>
+    <div class="note">For a new landing zone, or when Pilot 2's own breakpoint cannot be used. Set the new home first.</div>
   </section>
   <section>
-    <h2>Sync to RC ${ti('sync')}</h2>
+    <details class="adv"><summary>Sync to RC (not in use) ${ti('sync')}</summary>
     <label class="lbl" for="apiUrl">Sync server URL</label>
     <input id="apiUrl" type="url" placeholder="https://…" autocomplete="off" />
     <label class="lbl" for="apiToken" style="margin-top:8px">Office token ${ti('apiToken')}</label>
@@ -258,19 +272,22 @@ app.innerHTML = `
     <div class="row"><button id="publishBtn" disabled>Publish to RC</button><button id="pairBtn" class="ghost">Pair an RC</button></div>
     <div class="note" id="syncInfo"></div>
     <div class="pair-code" id="pairCode" hidden></div>
+    </details>
   </section>
 </aside>
 <main>
   <div id="map"></div>
   <div class="legend">
     <span><i style="background:var(--c-line)"></i>Data line</span><span><i style="background:var(--c-run)"></i>Run-in/out, turn</span>
-    <span><i style="background:var(--c-fig8)"></i>Figure-8</span><span><i style="background:var(--c-appr)"></i>Approach / exit</span>
+    <span><i style="background:var(--c-appr)"></i>Approach / exit</span>
     <span><i style="background:var(--c-transit)"></i>Transit</span><span><i style="background:var(--c-rth)"></i>RTH</span>
     <span><i style="background:var(--c-swath)"></i>Swath</span><span><i style="background:var(--c-overlap)"></i>Strip overlap</span>
     <span><i class="dot wp"></i>Waypoint (zoom in)</span><span><i class="dot" style="background:var(--c-line)"></i>Record start</span><span><i class="dot" style="background:var(--c-appr)"></i>Record stop</span>
     <span><i class="dot flag"></i>Flagged WP (see Checks)</span>
   </div>
   <div class="map-toggles">
+    <div class="place"><input id="placeSearch" type="search" placeholder="Find a place, or lat, lon" autocomplete="off" /><div class="place-results" id="placeResults" hidden></div></div>
+    <select id="basemapSel" title="Base map">${BASEMAPS.map(b => opt(b.id, b.name)).join('')}</select>
     <button id="view3d" class="ghost"${btnTip('view3d')}>3D</button>
     <select id="sortieSel" title="Show the whole job or one sortie"></select>
     <button id="layersBtn" class="ghost"${btnTip('layers')}>Layers ▾</button>
@@ -335,9 +352,6 @@ function syncFields() {
   const s = state.survey;
   $<HTMLSelectElement>('pulseSel').value = s.pulse;
   $<HTMLSelectElement>('scanSel').value = s.scan;
-  $<HTMLInputElement>('fig8On').checked = s.fig8;
-  $<HTMLInputElement>('fig8EndOn').checked = s.fig8End;
-  $<HTMLInputElement>('fig8EndOn').disabled = !s.fig8;
   $<HTMLSelectElement>('vmodeSel').value = P('verticalMode');
   document.querySelectorAll<HTMLElement>('aside [data-vmode]').forEach(el => { el.hidden = el.dataset.vmode !== P('verticalMode'); });
   $<HTMLInputElement>('djiCalOn').checked = s.djiCal;
@@ -435,8 +449,6 @@ $('sensorSeg').addEventListener('click', e => {
 });
 $('pulseSel').addEventListener('change', e => { state.survey.pulse = (e.target as HTMLSelectElement).value; change(); });
 $('scanSel').addEventListener('change', e => { state.survey.scan = (e.target as HTMLSelectElement).value; change(); });
-$('fig8On').addEventListener('change', e => { state.survey.fig8 = (e.target as HTMLInputElement).checked; change(); });
-$('fig8EndOn').addEventListener('change', e => { state.survey.fig8End = (e.target as HTMLInputElement).checked; change(); });
 $('vmodeSel').addEventListener('change', e => { state.params.verticalMode = (e.target as HTMLSelectElement).value as PlanOptions['verticalMode']; change(); });
 $('djiCalOn').addEventListener('change', e => { state.survey.djiCal = (e.target as HTMLInputElement).checked; change(); });
 $('rgbOn').addEventListener('change', e => { state.survey.rgbPhotos = (e.target as HTMLInputElement).checked; change(); });
@@ -473,18 +485,18 @@ const map = new maplibregl.Map({
   style: {
     version: 8,
     sources: {
-      sat: {
-        type: 'raster', tileSize: 256, maxzoom: 19,
-        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
-        attribution: 'Imagery © Esri, Maxar, Earthstar Geographics',
-      },
+      ...Object.fromEntries(BASEMAPS.map(b => ['bm-' + b.id, { type: 'raster', tileSize: 256, maxzoom: b.maxzoom, tiles: [...b.tiles], attribution: b.attribution }])),
       terrain3d: {
         type: 'raster-dem', tileSize: 256, maxzoom: 15, encoding: 'terrarium',
         tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
         attribution: '3D ground: AWS Terrain Tiles (Mapzen)',
       },
     },
-    layers: [{ id: 'sat', type: 'raster', source: 'sat', paint: { 'raster-saturation': -0.4, 'raster-brightness-max': 0.78 } }],
+    // every base map is a layer; the chosen one is visible (applyBasemap), so our overlays always sit above all of them
+    layers: BASEMAPS.map(b => ({
+      id: 'bm-' + b.id, type: 'raster' as const, source: 'bm-' + b.id, layout: { visibility: (b.id === basemap ? 'visible' : 'none') as 'visible' | 'none' },
+      paint: b.dim ? { 'raster-saturation': -0.4, 'raster-brightness-max': 0.78 } : {},
+    })),
   },
   // Open framed on the saved block (no waiting for tiles), else the Western Cape.
   ...(state.aoi ? {
@@ -512,6 +524,7 @@ const visibleRoles = () => [
 
 let mapReady = false;
 function onStyleReady() {   // style ready: add our layers without waiting for every tile
+  applyBasemap();
   for (const id of ['aoi', 'route', 'wps', 'rec', 'swath', 'overlap', 'transit', 'rth']) map.addSource(id, { type: 'geojson', data: empty });
   map.addLayer({ id: 'swath-fill', type: 'fill', source: 'swath', paint: { 'fill-color': css('--c-swath'), 'fill-opacity': 0.14 } });
   map.addLayer({ id: 'overlap-fill', type: 'fill', source: 'overlap', paint: { 'fill-color': css('--c-overlap'), 'fill-opacity': 0.38 } });
@@ -1064,6 +1077,50 @@ function renderProf() {
   renderProfile(svg, r.plan, pts, state.dem.elev, floor);
 }
 new ResizeObserver(() => renderProf()).observe($('profile'));
+
+// ── Base map and place search ──────────────────────────────────────
+$<HTMLSelectElement>('basemapSel').value = basemap;
+function applyBasemap() {
+  for (const b of BASEMAPS) if (map.getLayer('bm-' + b.id)) map.setLayoutProperty('bm-' + b.id, 'visibility', b.id === basemap ? 'visible' : 'none');
+}
+$('basemapSel').addEventListener('change', e => {
+  basemap = (e.target as HTMLSelectElement).value;
+  try { localStorage.setItem(BASEMAP_STORE, basemap); } catch { /* private window */ }
+  applyBasemap();
+});
+const placeIn = $<HTMLInputElement>('placeSearch'), placeRes = $('placeResults');
+interface Place { name: string; lat: number; lon: number; bbox?: [number, number, number, number] }   // bbox: west, south, east, north
+function goTo(p: Place) {
+  placeRes.hidden = true;
+  if (p.bbox) map.fitBounds([[p.bbox[0], p.bbox[1]], [p.bbox[2], p.bbox[3]]], { padding: 40, maxZoom: 15, duration: 900 });
+  else map.flyTo({ center: [p.lon, p.lat], zoom: 14, duration: 900 });
+}
+function showPlaces(items: Place[]) {
+  placeRes.replaceChildren();
+  if (!items.length) { const d = document.createElement('div'); d.className = 'none'; d.textContent = 'Nothing found. Try a town name, or "lat, lon".'; placeRes.append(d); }
+  for (const p of items) { const b = document.createElement('button'); b.type = 'button'; b.textContent = p.name; b.onclick = () => goTo(p); placeRes.append(b); }
+  placeRes.hidden = false;
+}
+async function searchPlace(q: string) {
+  const m = q.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if (m) {
+    const lat = +m[1], lon = +m[2];
+    if (Math.abs(lat) <= 90 && Math.abs(lon) <= 180) { goTo({ name: q, lat, lon }); return; }
+  }
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&q=${encodeURIComponent(q)}`, { headers: { Accept: 'application/json' } });
+    const js = await res.json() as { display_name: string; lat: string; lon: string; boundingbox?: string[] }[];
+    showPlaces(js.map(r => ({
+      name: r.display_name, lat: +r.lat, lon: +r.lon,
+      bbox: r.boundingbox && r.boundingbox.length === 4 ? [+r.boundingbox[2], +r.boundingbox[0], +r.boundingbox[3], +r.boundingbox[1]] as [number, number, number, number] : undefined,
+    })));
+  } catch { showPlaces([]); }
+}
+placeIn.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); const q = placeIn.value.trim(); if (q) void searchPlace(q); }
+  if (e.key === 'Escape') placeRes.hidden = true;
+});
+document.addEventListener('click', e => { if (!(e.target as HTMLElement).closest('.place')) placeRes.hidden = true; });
 $('stats').addEventListener('click', e => {
   const row = (e.target as HTMLElement).closest<HTMLElement>('[data-sortie]');
   if (!row) return;
