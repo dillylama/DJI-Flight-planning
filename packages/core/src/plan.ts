@@ -32,6 +32,10 @@ export interface PlanOptions {
   // survivors stays within this many metres ABOVE the terrain-following height at every dropped waypoint. 0 = off.
   // Every surviving leg is still held above the highest ground in its corridor, so this only ever flies higher.
   thinToleranceM: number;
+  // Where the route starts: which side of the block holds the first line (left/right of the course direction) and
+  // which end of it the first line is flown from ('near' = the end behind you when looking along the course).
+  startSide: 'left' | 'right';
+  startEnd: 'near' | 'far';
 }
 
 export const DEFAULTS: PlanOptions = {
@@ -60,6 +64,8 @@ export const DEFAULTS: PlanOptions = {
   dampingMaxM: 60,
   turnBankDeg: 20,
   thinToleranceM: 10,
+  startSide: 'left',
+  startEnd: 'near',
 };
 
 export interface Line {
@@ -94,6 +100,8 @@ function checkInputs(poly: LonLat[], o: PlanOptions): void {
   for (const [k, min] of pos) if (!(Number.isFinite(o[k] as number) && (o[k] as number) >= min)) bad(`${k} must be a number of at least ${min}.`);
   const nonNeg: (keyof PlanOptions)[] = ['runInM', 'runOutM', 'corridorM', 'maxGradient', 'roundingMaxM', 'fig8MinRadiusM', 'alignStraightS', 'dampingMaxM', 'courseDeg', 'thinToleranceM'];
   if (o.thinToleranceM > 500) bad('thinToleranceM must be 500 m or less.');
+  if (o.startSide !== 'left' && o.startSide !== 'right') bad('startSide must be left or right.');
+  if (o.startEnd !== 'near' && o.startEnd !== 'far') bad('startEnd must be near or far.');
   for (const k of nonNeg) if (!Number.isFinite(o[k] as number) || (k !== 'courseDeg' && (o[k] as number) < 0)) bad(`${k} must be a number, 0 or more.`);
   if (!(o.fovDeg >= 1 && o.fovDeg <= 150)) bad('fovDeg must be between 1° and 150°.');
   if (!(o.sidelapPct >= 0 && o.sidelapPct <= 90)) bad('sidelapPct must be between 0 and 90 %.');
@@ -125,14 +133,17 @@ export function planLines(polyLonLat: LonLat[], opts: Partial<PlanOptions> = {},
   if (!(spacing > 0) || !(n <= 2000)) throw new Error(`Line spacing ${spacing.toFixed(1)} m gives ${n} lines for this block: check AGL, field of view and sidelap.`);
   const vStart = (vmin + vmax) / 2 - ((n - 1) * spacing) / 2;
 
-  const lines: Line[] = [];
+  const strips: { v: number; umin: number; umax: number }[] = [];
   for (let i = 0; i < n; i++) {
     const v = vStart + i * spacing;
     const ext = bandExtent(uv, v - spacing / 2, v + spacing / 2);
-    if (!ext) continue;
-    const k = lines.length;
-    lines.push({ index: k, v, umin: ext[0], umax: ext[1], dir: k % 2 === 0 ? 1 : -1 });
+    if (ext) strips.push({ v, umin: ext[0], umax: ext[1] });
   }
+  // Start corner: lines are ordered from the chosen side (v grows to the right of the course), and the first line
+  // runs from the chosen end (dir +1 = from umin, the near end, towards the course heading).
+  if (o.startSide === 'right') strips.reverse();
+  const dir0 = o.startEnd === 'far' ? -1 : 1;
+  const lines: Line[] = strips.map((s, k) => ({ index: k, ...s, dir: (k % 2 === 0 ? dir0 : -dir0) as 1 | -1 }));
 
   return { o, proj, d, c, lines, swath, spacing, areaHa: polygonAreaM2(xy) / 1e4, polyXY: xy };
 }
