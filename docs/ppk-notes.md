@@ -35,10 +35,21 @@ positions and the `.RTK` file would still hold the raw observations.
    report exactly this for L1/L2 (rename `.RTK`/`PPKRAW.bin` to `.RTCM3` for Emlid Studio). Nothing DJI-specific in the
    way; the one check is the mapping of the MRK time stamps (GPS seconds + week) to the RINEX epochs.
 
+## Base data for the G3 flight
+
+Luke's Emlid Reach RS4 was logging at the time (it records continuously, 12-hour files). Flight window 13:39–13:50 SAST
+= 11:39–11:50 UTC on 14 Oct 2026; trim the base log to 11:30–11:55 UTC with `node tools/trim-rinex.ts` (RINEX 2 or
+3 observation files; navigation files stay whole). Files go in `samples/g3/base/` (local, gitignored) with a copy in
+`SynologyDrive\3dronemapping\Drones\M400\Flights\2026-10-14 G3 home block\base\` (NAS + C2 backup).
+
+Tools on this PC: Emlid Studio is installed (`C:\Program Files\Emlid Studio`) but its converter and post-processing
+programs are GUI back-end services, not command-line tools. For a scripted pipeline RTKLIB's `convbin` and `rnx2rtkp`
+(rtklibexplorer demo5 build) are needed; not installed yet.
+
 ## To do (in order)
 
-- [ ] Get a base RINEX file for the G3 flight window (TrigNet 30 s or 1 s data for the nearest station, or Luke's base
-      if it was logging). Without it nothing below can be tested.
+- [x] Base data: RS4 log for 14 Oct 2026 (Luke, in progress).
+- [ ] Trim the base log to the flight window; convert to RINEX if the RS4 wrote UBX/raw.
 - [ ] `convbin` the `.RTK` to RINEX; check epoch count (expect ~5 Hz × 563 s) and the four constellations.
 - [ ] `rnx2rtkp` kinematic solution; compare its positions at the MRK times with the MRK's own RTK positions (should
       agree to a few cm on a flight that was RTK-fixed throughout, which is the acceptance test for the pipeline).
