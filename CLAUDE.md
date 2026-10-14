@@ -56,7 +56,12 @@ DEM clip (AOI + buffer), offline basemap tiles.
 - Regression test: synthetic Nimba block: 23 lines, 902 WP, 137 km. `nimba.test.ts` compares the port with the
   legacy engine on the legacy's spherical plane (`planLines(…, 'sphere')`); production uses WGS84 radii.
 - Tools: `node tools/make-import-tests.ts` (RC import tests → samples/generated, each verified),
-  `node tools/compare-kmz.ts ours.kmz pilot2.kmz --dem dem.tif` (what did Pilot 2 change on re-export?).
+  `node tools/compare-kmz.ts ours.kmz pilot2.kmz --dem dem.tif` (what did Pilot 2 change on re-export?),
+  `node tools/compare-ftr.ts route.kmz FTR_Record_….txt --mrk photos.MRK` (flown track from Pilot 2's replay record
+  on the RC, `/sdcard/DJI/com.dji.industry.pilot/FlightRecord/FlightTaskReplay/`, and the L3's RTK photo positions,
+  against the route; G3 result in docs/safety.md §5a).
+- PPK (open, docs/ppk-notes.md): the L3 card holds `.RTK` (rover RTCM3 at 5 Hz), `.RTB` (base RTCM3) and `.MRK`
+  (per-photo RTK position + antenna offsets). Next step needs a base RINEX for the flight window.
 
 ## SDK facts (see docs/msdk-research.md for sources)
 - MSDK **5.18.0**; M400 since 5.15, L3 since 5.17. Kotlin 2.1, AGP 8.7, Gradle 8.12, JDK 17,

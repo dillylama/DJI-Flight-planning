@@ -80,10 +80,10 @@
   <div class="tile"><div class="k">Tests</div><div class="v">85</div><div class="s">core 70 + API 15, all passing</div></div>
   <div class="tile"><div class="k">Live planner</div><div class="v">Current</div><div class="s"><a href="https://planner.3dronemapping.com">planner.3dronemapping.com</a>, deployed 13 Oct</div></div>
   <div class="tile"><div class="k">Flights flown</div><div class="v">1</div><div class="s">G3 at the home block, 14 Oct</div></div>
-  <div class="tile"><div class="k">Next gate</div><div class="v">G4</div><div class="s">G3 flown 14 Oct; point-cloud check pending</div></div>
+  <div class="tile"><div class="k">Next gate</div><div class="v">G4</div><div class="s">G3 passed 14 Oct; next: real slopes</div></div>
 </div>
 
-<div class="banner"><b>Safety status:</b> first live flight flown on 14 Oct at the home block: height at waypoint 1 was 186 m above take-off against 186 m planned, the L3 recorded, the calibration passes flew, no messages. That settles the height-reference question in the planner's favour. Still to come: the point cloud's range to ground as the independent check of the AGL, then a flight over real slopes planned 100 m high (G4) before a job.</div>
+<div class="banner"><b>Safety status:</b> first live flight flown on 14 Oct at the home block: height at waypoint 1 was 186 m above take-off against 186 m planned, the L3 recorded, the calibration passes flew, no messages. The flight record and the L3's own RTK photo positions were then compared with the route: all 48 waypoints within 1 m laterally and within −2.6 to +0.3 m vertically, corners cut by at most 10 m, speeds as planned. G3 passed. Next: a flight over real slopes planned 100 m high (G4), and the point cloud once DJI Terra has processed it, to check the DEM against the real ground.</div>
 
 <h2>What the review found</h2>
 <p>Every row is fixed and has a test that fails if the fault comes back.</p>
@@ -198,7 +198,8 @@
         <li>Before take-off: the aircraft's height on the ground should match the DEM height of the home point. At waypoint 1 the RC should show the planner's "height at WP 1" within about 10 m. If not, stop.</li>
         <li>Afterwards: compare the flight log with the plan, and check the L3 range to ground against the planned AGL.</li>
       </ul>
-      <div class="pass"><b>14 Oct, home block, 100 m AGL, 6 lines, 8 m/s, 11 min:</b> height at waypoint 1 186 m against 186 m planned (so the aircraft reads our heights the way the planner assumes; the simulator's 32 m doubt was its own artefact). L3 recorded, calibration passes at both ends, no messages. <b>Pending:</b> the point cloud's range to ground on the lines, and the Pilot 2 flight record for a waypoint-by-waypoint comparison.</div>
+      <div class="pass"><b>14 Oct, home block, 100 m AGL, 6 lines, 8 m/s, 11 min:</b> height at waypoint 1 186 m against 186 m planned (so the aircraft reads our heights the way the planner assumes; the simulator's 32 m doubt was its own artefact). L3 recorded, calibration passes at both ends, no messages. <b>Flight record vs route</b> (Pilot 2's 5 Hz replay record, new tool compare-ftr): all 48 waypoints passed, heights −2.6…+0.3 m from the file, never more than 2.6 m below a leg, pass distance ≤ 1.1 m on the lines and 3–10 m inside the coordinated corners at 4–7 m/s, speeds within 0.5 m/s of the file, climb/descent within the planner's 4/3 m/s. <b>L3 RTK photo positions</b> (410 photos, all fixed): antenna height −2.0…+0.4 m from the route. <b>Still to do:</b> process the point cloud in DJI Terra and compare the ground it measures with the GLO-30 DEM (that is a DEM check, the aircraft side is settled).</div>
+      <div class="pass"><b>New question, 14 Oct:</b> the card holds a 5 Hz raw GNSS log (RTCM3, four constellations), the base's corrections and a per-photo MRK file, so PPK looks possible for both the point cloud (DJI Terra with a base RINEX) and the photos (RTKLIB → camera positions for Metashape). Written up in docs/ppk-notes.md; needs a base RINEX for the flight window to test.</div>
     </div>
   </div>
 
@@ -297,6 +298,7 @@
 
 <h2>Change log</h2>
 <div class="log">
+  <p><span class="d">14 Oct 14:20</span> Pulled the Pilot 2 flight record and the L3 files off the RC and card. Flight record vs route: all 48 waypoints within 1 m laterally, −2.6…+0.3 m vertically; L3 RTK photo heights within −2.0…+0.4 m of the route. G3 passed. PPK investigation opened (docs/ppk-notes.md).</p>
   <p><span class="d">14 Oct 13:52</span> First live flight (G3) at the home block: waypoint 1 at 186 m as planned, L3 recorded, calibration flown, nothing odd. Height-reference question settled.</p>
   <p><span class="d">13 Oct 18:33</span> Breakpoint resume checked in the simulator: the L3 starts recording again by itself and the route continues from the breakpoint. Decision: resume the Pilot 2 way; the planner's re-fly-a-line route is only a fallback.</p>
   <p><span class="d">13 Oct 18:00</span> test-01c (coordinated turns) round-tripped through Pilot 2 with no differences: the turn mode and the corner damping are kept. Coordinated turns are live in the planner.</p>
