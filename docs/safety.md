@@ -76,6 +76,24 @@ at 2 m/s²), so the aircraft is never faster than a leg allows whether it change
 passing a waypoint or ramps towards the next one. A leg that would need less than 1 m/s is an error
 (`TOO_STEEP`).
 
+## 3a. Waypoint thinning (added 14 Oct 2026)
+
+Pilot 2 slows down above about 1,000 waypoints and crashed at 2,013, and a job is one route per landing zone
+flown to the end (not pre-planned sorties), so files must be as short as the terrain allows. After the heights
+are set, line waypoints are dropped wherever the straight leg between the survivors stays within
+`thinToleranceM` **above** the terrain-following height at every dropped waypoint. What survives is rebuilt with
+the same rule as everything else: every leg is held above the highest ground in its whole corridor. Thinning
+therefore only ever flies higher, costs point density, and never clearance; the exported file is verified by the
+independent checker exactly like an un-thinned one, and `thin.test.ts` checks that the thinned route never sits
+below the dense requirement and never more than the tolerance above it.
+
+Two consequences of the leg rule that the tolerance makes visible. On a slope every leg is level with its own
+highest ground, so the excess at the lower end grows with the leg length (about slope × length): a 5 % slope with a
+10 m tolerance keeps a waypoint every 200 m whatever the spacing. And a harsh tolerance on steep ground joins a
+level step to a steep drop, so the slowed legs get slower and the route takes longer; the planner shows the time.
+Kept whatever the tolerance: run-ins, run-outs, corners, approach, exit, transit, figure-8s, every waypoint with an
+action, every stop turn.
+
 ## 4. Take-off, RTH and what the file cannot carry
 
 - Transit home → waypoint 1 is modelled for both `flyToWaylineMode`s and must clear the corridor by

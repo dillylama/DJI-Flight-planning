@@ -28,6 +28,10 @@ export interface PlanOptions {
   // instead of slowing to a near stop: d = v² / (g·tan bank), the turn radius at that bank. Pilot 2 cuts the
   // executed damping to 10 m when it imports a route; a route pushed from 3DM Fly flies this value.
   turnBankDeg: number;
+  // Waypoint thinning (heights.ts flightRoute): line waypoints are dropped wherever the straight leg between the
+  // survivors stays within this many metres ABOVE the terrain-following height at every dropped waypoint. 0 = off.
+  // Every surviving leg is still held above the highest ground in its corridor, so this only ever flies higher.
+  thinToleranceM: number;
 }
 
 export const DEFAULTS: PlanOptions = {
@@ -55,6 +59,7 @@ export const DEFAULTS: PlanOptions = {
   dampingFrac: 1 / 3,      // the most a damping may take of the shorter adjacent leg (Pilot 2's own rule)
   dampingMaxM: 60,
   turnBankDeg: 20,
+  thinToleranceM: 10,
 };
 
 export interface Line {
@@ -87,7 +92,8 @@ function checkInputs(poly: LonLat[], o: PlanOptions): void {
   if (Math.max(...lons) - Math.min(...lons) > 2 || Math.max(...lats) - Math.min(...lats) > 2) bad('The block spans more than 2° (or crosses the 180° meridian). Split it into smaller blocks.');
   const pos: [keyof PlanOptions, number][] = [['aglM', 1], ['speedMs', 0.5], ['wpSpacingM', 10], ['demSampleM', 1], ['climbMs', 0.1], ['descentMs', 0.1], ['minLegSpeedMs', 0.1], ['fig8PtsPerLoop', 6]];
   for (const [k, min] of pos) if (!(Number.isFinite(o[k] as number) && (o[k] as number) >= min)) bad(`${k} must be a number of at least ${min}.`);
-  const nonNeg: (keyof PlanOptions)[] = ['runInM', 'runOutM', 'corridorM', 'maxGradient', 'roundingMaxM', 'fig8MinRadiusM', 'alignStraightS', 'dampingMaxM', 'courseDeg'];
+  const nonNeg: (keyof PlanOptions)[] = ['runInM', 'runOutM', 'corridorM', 'maxGradient', 'roundingMaxM', 'fig8MinRadiusM', 'alignStraightS', 'dampingMaxM', 'courseDeg', 'thinToleranceM'];
+  if (o.thinToleranceM > 500) bad('thinToleranceM must be 500 m or less.');
   for (const k of nonNeg) if (!Number.isFinite(o[k] as number) || (k !== 'courseDeg' && (o[k] as number) < 0)) bad(`${k} must be a number, 0 or more.`);
   if (!(o.fovDeg >= 1 && o.fovDeg <= 150)) bad('fovDeg must be between 1° and 150°.');
   if (!(o.sidelapPct >= 0 && o.sidelapPct <= 90)) bad('sidelapPct must be between 0 and 90 %.');

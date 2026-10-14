@@ -44,6 +44,16 @@ DEM clip (AOI + buffer), offline basemap tiles.
   (vendors + DJI L2/L3 manuals: align at both ends for forward/backward trajectory processing). Recording runs
   from the approach waypoint (START_RECORD) through the end figure-8 to the exit waypoint (STOP_RECORD).
   Straight level run ≥ alignStraightS (12 s) or 2.5 r before the first 8 and after the last.
+- **Waypoint thinning** (`thinToleranceM`, default 10 m; `flightRoute()` in heights.ts = applyHeights + thinning):
+  line waypoints are dropped wherever the straight leg between the survivors stays within the tolerance ABOVE the
+  terrain-following height at every dropped waypoint. Legs are still held above the highest ground in their corridor
+  (every leg is level with its own highest ground, so on a slope the excess grows with leg length and limits thinning
+  by itself). Only ever flies higher; verified like any file. Luke (14 Oct 2026): be harsh, 10–20 m of height does
+  not matter at the AGL he flies. The planner profile draws the dropped waypoints dashed.
+- **Operating model (Luke, 14 Oct 2026)**: a job is ONE route per landing zone, flown to the end across however many
+  batteries/days it takes, with Pilot 2's breakpoint resume for every interruption; the LZ move uses "from line N
+  with a new home". Pre-planned sorties are only a time/battery estimate, not an operating unit. The file cap is the
+  only reason a block becomes several files (chunked by lines in the office).
 - **Transit in the route** (option, off by default): `buildRoute({ transit: { home, speedMs, clearanceM } })` adds
   role `transit` waypoints home → approach and exit → home; approach and exit become stop turns. `toUgcsCsv()`
   exports any route for a second look in UgCS. docs/ugcs-notes.md has the UgCS 6.1 comparison.
