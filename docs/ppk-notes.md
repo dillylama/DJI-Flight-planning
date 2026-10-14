@@ -21,6 +21,17 @@ Conclusion so far: the aircraft **always** records what PPK needs, whether or no
 G3 flight is RTK-fixed because the network RTK worked; on a flight without corrections the MRK would carry single-point
 positions and the `.RTK` file would still hold the raw observations.
 
+**MRK finding (G3 data):** only 267 of the 410 photo lines carry an exposure time; 143 have `-259200.000000 [-522]`
+and zero offsets, although they still carry an RTK position and `50,Q`. Both cameras (`_LV`, `_RV`) are affected, in no
+obvious pattern. Those photos cannot be placed on a PPK trajectory from the MRK alone. To investigate: whether the
+exposure time can be recovered from the DNG/JPG metadata (DJI writes GPS time in XMP), and whether the photo interval
+(our `takePhoto` on distance, about 2 s apart with two cameras firing) is simply too fast for the L3's event marker.
+
+The base position the aircraft used in flight is in the `.RTB` 1006 message (ECEF, 0.1 mm, with the broadcast antenna
+height), not in the base RINEX header (which carries the receiver's single-point position, about 1 m off). PPK must use
+the 1006 position or the result will not match the RTK flight: `node tools/rtb-base.ts file.RTB` prints it in the form
+`rnx2rtkp -r` takes.
+
 ## Two separate PPK problems
 
 1. **The LiDAR trajectory** (point cloud). DJI Terra processes L3 data and accepts a base-station RINEX observation file

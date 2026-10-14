@@ -79,11 +79,11 @@
   <div class="tile"><div class="k">Build</div><div class="v">10 / 10</div><div class="s">PRs merged on main</div></div>
   <div class="tile"><div class="k">Tests</div><div class="v">85</div><div class="s">core 70 + API 15, all passing</div></div>
   <div class="tile"><div class="k">Live planner</div><div class="v">Current</div><div class="s"><a href="https://planner.3dronemapping.com">planner.3dronemapping.com</a>, deployed 13 Oct</div></div>
-  <div class="tile"><div class="k">Flights flown</div><div class="v">1</div><div class="s">G3 at the home block, 14 Oct</div></div>
-  <div class="tile"><div class="k">Next gate</div><div class="v">G4</div><div class="s">G3 passed 14 Oct; next: real slopes</div></div>
+  <div class="tile"><div class="k">Flights flown</div><div class="v">2</div><div class="s">G3 and G4 at home, 14 Oct</div></div>
+  <div class="tile"><div class="k">Next gate</div><div class="v">G4</div><div class="s">G4 flown 14 Oct; point cloud check pending</div></div>
 </div>
 
-<div class="banner"><b>Safety status:</b> first live flight flown on 14 Oct at the home block: height at waypoint 1 was 186 m above take-off against 186 m planned, the L3 recorded, the calibration passes flew, no messages. The flight record and the L3's own RTK photo positions were then compared with the route: all 48 waypoints within 1 m laterally and within −2.6 to +0.3 m vertically, corners cut by at most 10 m, speeds as planned. G3 passed. Next: a flight over real slopes planned 100 m high (G4), and the point cloud once DJI Terra has processed it, to check the DEM against the real ground.</div>
+<div class="banner"><b>Safety status:</b> first live flight flown on 14 Oct at the home block: height at waypoint 1 was 186 m above take-off against 186 m planned, the L3 recorded, the calibration passes flew, no messages. The flight record and the L3's own RTK photo positions were then compared with the route: all 48 waypoints within 1 m laterally and within −2.6 to +0.3 m vertically, corners cut by at most 10 m, speeds as planned. G3 passed. The same afternoon G4 flew across the valley at home, wall to wall, 240 to 446 m above home over ground that rises 223 m: all 46 waypoints within 0.6 m of the file, the steep legs flown at 2 to 5 m/s with the aircraft holding its own climb and descent limits below the planner's. What remains for G4 is the point cloud from DJI Terra, to check the GLO-30 DEM against the real walls. PPK is proven on G3 to the centimetre.</div>
 
 <h2>What the review found</h2>
 <p>Every row is fixed and has a test that fails if the fault comes back.</p>
@@ -298,6 +298,7 @@
 
 <h2>Change log</h2>
 <div class="log">
+  <p><span class="d">14 Oct 15:20</span> G4 flown across the home valley (3 lines, 46 waypoints, 200 m AGL planned, lines 240–446 m above home). Flight record within −0.6…+0.3 m of the file everywhere; the aircraft flew the steep legs slower than asked (its own limits ≈3.7 m/s up, 2.6 down). Point-cloud DEM check pending. PPK on G3: 100 % fixed with L1+L2+L5, photos within 0.5 cm / 2.4 cm of the aircraft's RTK.</p>
   <p><span class="d">14 Oct 14:20</span> Pulled the Pilot 2 flight record and the L3 files off the RC and card. Flight record vs route: all 48 waypoints within 1 m laterally, −2.6…+0.3 m vertically; L3 RTK photo heights within −2.0…+0.4 m of the route. G3 passed. PPK investigation opened (docs/ppk-notes.md).</p>
   <p><span class="d">14 Oct 13:52</span> First live flight (G3) at the home block: waypoint 1 at 186 m as planned, L3 recorded, calibration flown, nothing odd. Height-reference question settled.</p>
   <p><span class="d">13 Oct 18:33</span> Breakpoint resume checked in the simulator: the L3 starts recording again by itself and the route continues from the breakpoint. Decision: resume the Pilot 2 way; the planner's re-fly-a-line route is only a fallback.</p>

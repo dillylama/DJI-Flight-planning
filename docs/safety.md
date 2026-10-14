@@ -165,6 +165,18 @@ the two independent height sources (flight controller record, L3 RTK antenna) ag
 AGL figure is therefore the height the aircraft flies; what remains for G4 is the DEM side (how far the real ground
 is from GLO-30 on slopes), which the point cloud will show once processed in DJI Terra.
 
+**G4 flight, aircraft side (14 Oct 2026, same afternoon).** Block 550 × 250 m straddling the valley at home, wall to
+wall (ground −4 … +223 m against home), 3 east–west lines up one wall and down the other, planned 200 m AGL at 10 m/s,
+80 m run-ins, 46 waypoints, L3 at 100 kHz; the planner held the lines 240–446 m above home. Max Altitude 480, RTH 150.
+Flight record against the file: all 46 waypoints passed, heights −0.6 … +0.3 m from the file, never more than 1.6 m
+below a leg, pass distance ≤ 0.7 m on the lines and 6 m inside the coordinated corners; waypoint 1 read 448 m against
+446 planned. Mission 10.3 min. On the 33 slowed legs the aircraft flew **slower than the file**, not faster: climbs of
+3.1–3.4 m/s at 4.0–4.4 m/s horizontal where the file said 5.1, descents of 2.0–2.4 m/s at 1.7–3.4 m/s where the file
+said 2.6–4.0. Its own waypoint-mission limits are therefore about 3.7 m/s up and 2.6 m/s down, below the 4 / 3 the
+planner assumes, so the planner's slowed legs are on the safe side of the aircraft's behaviour and the only effect is
+time (the G4 lines took 10.3 min against 7.5 planned). Candidate change: planner defaults climb 3.5, descent 2.5 m/s
+for honest timing. The DEM side of G4 (real ground vs GLO-30 on the walls) waits for the point cloud from DJI Terra.
+
 ## 6. What none of this covers
 
 1. **Obstacles that are not in the DEM**: masts, power lines, cranes, turbines, new buildings, trees
@@ -190,7 +202,7 @@ Items 4 and 5 are what the gates are for.
 | G1 | Import the test files into Pilot 2; save and re-export `test-01`; `tools/compare-kmz.ts` | Heights within 0.1 m, speeds, damping, `useStraightLine`, actions unchanged; cap known |
 | G2 | DJI simulator, props off: full route, RTH mid-line | **Passed 13 Oct 2026** (section 5a). RC loss not simulated. |
 | G3 | Live, open ground, RTK fixed | **Passed 14 Oct 2026** at the home block (100 m AGL, 6 lines): height at waypoint 1 186 m vs 186 m planned; flight record within −2.6…+0.3 m of the file at all 48 waypoints, L3 RTK photo heights within −2.0…+0.4 m of the route; L3 recorded, calibration passes flown, no messages. Point cloud still to be processed (DEM check, not an aircraft check). |
-| G4 | Live, real slopes, planned 100 m higher than the job needs | Measured AGL never below plan − 10 m; no leg at the speed floor |
+| G4 | Live, real slopes, planned 100 m higher than the job needs | **Flown 14 Oct 2026** across the home valley (ground −4…+223 m, lines 240–446 m above home): flight record within −0.6…+0.3 m of the file at all 46 waypoints, slowest leg flown 1.7 m/s (file 2.6), no leg at the floor. **Pending:** measured AGL from the point cloud never below plan − 10 m (DJI Terra). |
 | Job | Step down only if G4 held | Obstacle survey done; never below 100 m AGL on GLO-30 |
 
 ## 8. Pre-flight, every route
