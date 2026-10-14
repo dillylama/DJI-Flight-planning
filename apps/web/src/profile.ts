@@ -11,7 +11,9 @@ export interface ProfilePt { xy: XY; h: number; role: string }
 
 // Height profile along a path: flight height, terrain under the path sampled densely from the DEM, and
 // terrain + floorM (the height the flight path must stay above: AGL on lines, min clearance on transit).
-export function renderProfile(svg: SVGSVGElement, plan: Plan, pts: ProfilePt[], elev: ElevFn, floorM: number) {
+// `ref` (optional) is the un-thinned route over the same stretch: drawn dashed, with its dropped waypoints as
+// hollow circles, so the effect of waypoint thinning is visible.
+export function renderProfile(svg: SVGSVGElement, plan: Plan, pts: ProfilePt[], elev: ElevFn, floorM: number, ref?: ProfilePt[]) {
   svg.replaceChildren();
   const W = svg.clientWidth || 800, H = svg.clientHeight || 200;
   const pad = { l: 52, r: 12, t: 12, b: 24 };
@@ -20,6 +22,21 @@ export function renderProfile(svg: SVGSVGElement, plan: Plan, pts: ProfilePt[], 
   const cum = [0];
   for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + dist(pts[i].xy, pts[i - 1].xy));
   const total = cum[cum.length - 1] || 1;
+  // reference points: distance along the thinned path (projected onto the nearest leg, by cumulative distance)
+  const refD: number[] = [];
+  if (ref && ref.length > 1) {
+    for (const p of ref) {
+      let best = Infinity, d = 0;
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1].xy, b = pts[i].xy, L = cum[i] - cum[i - 1];
+        if (L < 1e-6) continue;
+        const f = Math.max(0, Math.min(1, ((p.xy[0] - a[0]) * (b[0] - a[0]) + (p.xy[1] - a[1]) * (b[1] - a[1])) / (L * L)));
+        const dd = Math.hypot(p.xy[0] - (a[0] + f * (b[0] - a[0])), p.xy[1] - (a[1] + f * (b[1] - a[1])));
+        if (dd < best) { best = dd; d = cum[i - 1] + f * L; }
+      }
+      refD.push(d);
+    }
+  }
 
   const terr: [number, number][] = [];
   for (let i = 1; i < pts.length; i++) {
@@ -33,7 +50,7 @@ export function renderProfile(svg: SVGSVGElement, plan: Plan, pts: ProfilePt[], 
       if (h != null && Number.isFinite(h)) terr.push([cum[i - 1] + L * t, h]);
     }
   }
-  const hs = [...pts.map(w => w.h), ...terr.map(t => t[1])];
+  const hs = [...pts.map(w => w.h), ...terr.map(t => t[1]), ...(ref ?? []).map(w => w.h)];
   const hMin = Math.min(...hs) - 40, hMax = Math.max(...hs) + 40;
   const X = (d: number) => pad.l + (d / total) * (W - pad.l - pad.r);
   const Y = (h: number) => H - pad.b - ((h - hMin) / (hMax - hMin)) * (H - pad.t - pad.b);
@@ -56,6 +73,11 @@ export function renderProfile(svg: SVGSVGElement, plan: Plan, pts: ProfilePt[], 
     const area = `M${X(terr[0][0])},${Y(hMin)} ` + terr.map(([d, h]) => `L${X(d)},${Y(h)}`).join(' ') + ` L${X(terr[terr.length - 1][0])},${Y(hMin)} Z`;
     svg.append(el('path', { d: area, class: 'terrain' }));
     svg.append(el('polyline', { points: terr.map(([d, h]) => `${X(d)},${Y(h + floorM)}`).join(' '), class: 'agl-floor' }));
+  }
+  if (ref && refD.length === ref.length && ref.length > pts.length) {
+    svg.append(el('polyline', { points: ref.map((w, i) => `${X(refD[i])},${Y(w.h)}`).join(' '), class: 'flight-ref' }));
+    const kept = new Set(pts.map(w => `${w.xy[0].toFixed(2)},${w.xy[1].toFixed(2)}`));
+    ref.forEach((w, i) => { if (!kept.has(`${w.xy[0].toFixed(2)},${w.xy[1].toFixed(2)}`)) svg.append(el('circle', { cx: X(refD[i]), cy: Y(w.h), r: 2, class: 'wp dropped' })); });
   }
   svg.append(el('polyline', { points: pts.map((w, i) => `${X(cum[i])},${Y(w.h)}`).join(' '), class: 'flight' }));
   pts.forEach((w, i) => svg.append(el('circle', { cx: X(cum[i]), cy: Y(w.h), r: w.role === 'line' ? 2.5 : 3.5, class: 'wp ' + w.role })));

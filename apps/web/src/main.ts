@@ -5,7 +5,7 @@ import { MapboxOverlay } from '@deck.gl/mapbox';
 import { PathLayer, LineLayer } from '@deck.gl/layers';
 import {
   DEFAULTS, TAKEOFF_DEFAULTS, M400_LIMITS, M400_SPEC, L3_PULSE, L3_SCAN, CAMERAS, SAFETY,
-  planLines, buildRoute, applyHeights, stats, validate, readGeoTiff, rasterElev, rasterBbox, rasterGaps,
+  planLines, buildRoute, flightRoute, stats, validate, readGeoTiff, rasterElev, rasterBbox, rasterGaps,
   bufferedBbox, openTopoUrl, planTransit, coverage, checkLimits, planSorties, writeWpml, writeKmz,
   cameraFovDeg, gsdCm, aglForGsd, photoPlan, frontlapAtInterval, lidarDensity,
   safetyChecks, clearanceBudget, verifyRouteFiles, toUgcsCsv,
@@ -30,12 +30,12 @@ type PlanIssue = Issue & { sortie?: number };
 interface RouteFile { name: string; sortie: number | null; fromLine: number; toLine: number; transit: Transit | null; files: WpmlFiles; report: VerifyReport }
 interface Verified { ok: boolean; routes: RouteFile[]; ms: number }
 interface Result {
-  plan: Plan; route: Route; flight: Route<FlightWp> | null; st: RouteStats | null; issues: PlanIssue[];
+  plan: Plan; route: Route; flight: Route<FlightWp> | null; dense: Route<FlightWp> | null; st: RouteStats | null; issues: PlanIssue[];
   demError: string | null; transit: Transit | null; cov: Coverage | null; photo: PhotoPlan | null; totalMin: number | null;
   sp: SortiePlan | null; budget: ClearanceBudget | null; verify: Verified | null;
 }
 // What the map/profile show: the whole job, or one sortie.
-interface View { plan: Plan; route: Route; flight: Route<FlightWp> | null; transit: Transit | null; cov: Coverage | null; issues: PlanIssue[]; lastLine: number }
+interface View { plan: Plan; route: Route; flight: Route<FlightWp> | null; dense?: Route<FlightWp> | null; transit: Transit | null; cov: Coverage | null; issues: PlanIssue[]; lastLine: number }
 type SensorKind = 'lidar' | 'photo';
 interface SurveyCfg { sensor: SensorKind; pulse: string; scan: string; fig8: boolean; camera: string; frontlap: number; shutterInv: number; sortieMin: number; sortieOverlap: number; maxWp: number | null; djiCal: boolean; rgbPhotos: boolean; fig8End: boolean; uncertaintyM: number; demDatum: VerticalDatum; transitInRoute: boolean; profile: string }
 const SURVEY_DEFAULTS: SurveyCfg = { sensor: 'lidar', pulse: '100', scan: 'linear', fig8: false, camera: 'p1-35', frontlap: 80, shutterInv: 1000, sortieMin: M400_LIMITS.sortieMinDefault, sortieOverlap: 0, maxWp: null, djiCal: true, rgbPhotos: true, fig8End: false, uncertaintyM: SAFETY.uncertaintyDefaultM, demDatum: 'orthometric', transitInRoute: false, profile: 'l3' };
@@ -116,6 +116,7 @@ const FIELDS: Field<keyof PlanOptions>[] = [
   { key: 'runInM', label: 'Run-in', unit: 'm', step: 10, min: 20, max: 1000 },
   { key: 'runOutM', label: 'Run-out', unit: 'm', step: 10, min: 20, max: 1000 },
   { key: 'wpSpacingM', label: 'Max WP spacing', unit: 'm', step: 10, min: 20, max: 1000 },
+  { key: 'thinToleranceM', label: 'Thinning tolerance', unit: 'm', step: 5, min: 0, max: 200 },
   { key: 'corridorM', label: 'Terrain corridor ±', unit: 'm', step: 5, min: SAFETY.corridorMinM, max: 500 },
   { key: 'climbMs', label: 'Max climb rate', unit: 'm/s', step: 0.5, min: 0.5, max: M400_LIMITS.climbMaxMs, vmode: 'slow' },
   { key: 'descentMs', label: 'Max descent rate', unit: 'm/s', step: 0.5, min: 0.5, max: M400_LIMITS.descentMaxMs, vmode: 'slow' },
@@ -632,13 +633,14 @@ function compute(): Result | null {
   if (!plan.lines.length) return null;
   const fromLine = state.resume.on ? Math.min(plan.lines.length, Math.max(1, state.resume.fromLine)) - 1 : undefined;
   const route = buildRoute(plan, routeOpts(plan, fromLine));
-  const r: Result = { plan, route, flight: null, st: null, issues: [], demError: null, transit: null, cov: null, photo: null, totalMin: null, sp: null, budget: null, verify: null };
+  const r: Result = { plan, route, flight: null, dense: null, st: null, issues: [], demError: null, transit: null, cov: null, photo: null, totalMin: null, sp: null, budget: null, verify: null };
   if (isPhoto()) r.photo = photoPlan(camera(), plan.o.aglM, route.speedMs, state.survey.frontlap, 1 / state.survey.shutterInv);
   if (!state.dem) return r;
   // Demo terrain belongs to the demo block only. Belt and braces: setAoi already drops it for any other block.
   if (state.dem.synthetic && !state.demo) { state.dem = null; state.demBuf = null; updateDemInfo(); return r; }
   try {
-    r.flight = applyHeights(plan, route, state.dem.elev);
+    const fr = flightRoute(plan, route, state.dem.elev);
+    r.flight = fr.flight; r.dense = fr.dense;
   } catch (e) {
     r.demError = (e as Error).message + '. The DEM must cover the whole route with no gaps: block, run-ins, figure-8s and the terrain corridor around them. Fetch GLO-30 again for this route, or load a larger DEM.';
     return r;
@@ -719,7 +721,7 @@ function viewOf(r: Result | null): View | null {
   if (!r) return null;
   const so = state.selSortie !== 'all' ? r.sp?.sorties[state.selSortie] : undefined;
   // Waypoint numbers in an issue refer to the route it was raised on: the whole job, or one sortie.
-  if (!so) return { plan: r.plan, route: r.route, flight: r.flight, transit: r.transit, cov: r.cov, issues: r.issues.filter(i => i.sortie == null), lastLine: r.plan.lines.length - 1 };
+  if (!so) return { plan: r.plan, route: r.route, flight: r.flight, dense: r.dense, transit: r.transit, cov: r.cov, issues: r.issues.filter(i => i.sortie == null), lastLine: r.plan.lines.length - 1 };
   const cov = r.cov && { ...r.cov, swaths: r.cov.swaths.filter(s => s.line >= so.fromLine && s.line <= so.toLine) };
   return { plan: r.plan, route: so.route, flight: so.route, transit: so.transit, cov, issues: r.issues.filter(i => i.sortie === so.index), lastLine: so.toLine };
 }
@@ -919,7 +921,7 @@ function renderStats(r: Result | null) {
   const rows: Row[] = ['Block',
     ['Area', `${fmt(plan.areaHa)} ha`], ['Lines', `${plan.lines.length}`],
     [photo ? 'Footprint / spacing' : 'Swath / spacing', `${fmt(plan.swath)} / ${fmt(plan.spacing)} m`, 'At nominal AGL. Spacing = swath × (1 − sidelap).'],
-    ['Waypoints', `${fmt(route.wps.length)}`],
+    ['Waypoints', r.flight ? (r.flight.thinned && r.flight.thinned.before > r.flight.wps.length ? `${fmt(r.flight.wps.length)} (thinned from ${fmt(r.flight.thinned.before)})` : `${fmt(r.flight.wps.length)}`) : `${fmt(route.wps.length)}`, 'Thinning drops line waypoints wherever a straight leg stays within the tolerance above the terrain-following height; every leg is still held above the highest ground in its corridor.'],
   ];
   if (photo) {
     const c = camera();
@@ -1053,7 +1055,11 @@ function renderProf() {
     floor = r.plan.o.aglM;
     $('floorLabel').textContent = 'Terrain + AGL';
     const agl = wps.filter(w => w.role === 'line').map(w => w.h - w.terrainUnderWp);
-    info.textContent = agl.length ? `AGL ${fmt(Math.min(...agl))}–${fmt(Math.max(...agl))} m (nominal ${floor}) · height ${fmt(Math.min(...wps.map(w => w.h)))}–${fmt(Math.max(...wps.map(w => w.h)))} m` : '';
+    const denseLine = r.dense?.wps.filter(w => w.line === state.selLine) ?? [];
+    const thinNote = denseLine.length > wps.length ? ` · thinned ${denseLine.length} → ${wps.length} waypoints` : '';
+    info.textContent = agl.length ? `AGL ${fmt(Math.min(...agl))}–${fmt(Math.max(...agl))} m (nominal ${floor}) · height ${fmt(Math.min(...wps.map(w => w.h)))}–${fmt(Math.max(...wps.map(w => w.h)))} m${thinNote}` : '';
+    renderProfile(svg, r.plan, pts, state.dem.elev, floor, denseLine.length > wps.length ? denseLine : undefined);
+    return;
   }
   renderProfile(svg, r.plan, pts, state.dem.elev, floor);
 }
@@ -1188,7 +1194,7 @@ function courseCost(c: number): number {
   const p = planLines(state.aoi!.poly, { ...planOpts(), courseDeg: c });
   if (!state.dem) return p.lines.length * 1e9 + p.lines.reduce((s, L) => s + (L.umax - L.umin), 0);
   try {
-    const f = applyHeights(p, buildRoute(p, routeOpts(p)), state.dem.elev);
+    const f = flightRoute(p, buildRoute(p, routeOpts(p)), state.dem.elev).flight;
     const st = stats(p, f);
     const lineAgl = f.wps.filter(w => w.role === 'line').map(w => w.h - w.terrainUnderWp);
     return st.routeKm * (lineAgl.reduce((s, v) => s + v, 0) / lineAgl.length / p.o.aglM);

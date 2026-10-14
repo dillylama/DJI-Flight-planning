@@ -1,5 +1,5 @@
 import { type LonLat, type XY, dist } from './geo.ts';
-import { applyHeights, routeTimeS, type FlightWp } from './heights.ts';
+import { flightRoute, routeTimeS, type FlightWp } from './heights.ts';
 import type { Plan } from './plan.ts';
 import { buildRoute, legSpeed, type Route, type RouteWp } from './route.ts';
 import { planTransit, TAKEOFF_DEFAULTS, type TakeoffOptions, type Transit } from './takeoff.ts';
@@ -63,7 +63,7 @@ export function planSorties(
   const issues: Issue[] = [];
 
   // Heights of the whole job once: used to estimate the climb for any candidate range.
-  const full = opts.full ?? applyHeights(plan, buildRoute(plan, { startLine: first, speedMs: speed, fig8, fig8End: opts.fig8End }), elev);
+  const full = opts.full ?? flightRoute(plan, buildRoute(plan, { startLine: first, speedMs: speed, fig8, fig8End: opts.fig8End }), elev).flight;
   const topOfLine = new Map<number, number>();
   for (const w of full.wps) if (w.line != null) topOfLine.set(w.line, Math.max(topOfLine.get(w.line) ?? -Infinity, w.h));
   const hTopRange = (s: number, e: number) => { let m = -Infinity; for (let i = s; i <= e; i++) m = Math.max(m, topOfLine.get(i) ?? -Infinity); return m; };
@@ -95,7 +95,7 @@ export function planSorties(
 
   // One sortie built exactly: its own heights, transit/RTH check and time.
   const exact = (a: number, b: number, index: number): Sortie => {
-    const route = applyHeights(plan, buildRoute(plan, { startLine: a, endLine: b, speedMs: speed, fig8, fig8End: opts.fig8End, transit: ferry }), elev);
+    const route = flightRoute(plan, buildRoute(plan, { startLine: a, endLine: b, speedMs: speed, fig8, fig8End: opts.fig8End, transit: ferry }), elev).flight;
     const transit = home ? planTransit(plan, route, elev, home, tk) : null;
     const hTop = Math.max(...route.wps.map(w => w.h));
     const time = sortieTime(route.wps, speed, homeXY, homeElev, hTop, tk, climbMs, descentMs, fixed);

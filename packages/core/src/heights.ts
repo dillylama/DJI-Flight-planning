@@ -143,6 +143,83 @@ export function applyHeights(plan: Plan, route: Route, elev: ElevFn): Route<Flig
   return { ...route, wps: out };
 }
 
+// Waypoint thinning.
+//
+// A waypoint every 50–150 m along a line carries no information over flat ground: the terrain-following
+// heights of neighbours are the same, and Pilot 2 slows down (and above ~2,000 waypoints crashes) on big
+// files. Thinning keeps, on each line, only the waypoints needed for the straight legs between them to stay
+// within `thinToleranceM` ABOVE the terrain-following height at every waypoint that was dropped. It never
+// lowers anything: a longer leg is still held above the highest ground in its whole corridor by applyHeights,
+// exactly like a short one, so the clearance guarantee is unchanged and the exported file is verified as
+// before. The tolerance is only how much extra height (and fewer points on the ground) is accepted.
+//
+// Kept whatever the tolerance: every waypoint that is not a plain line waypoint (run-ins, run-outs, corners,
+// approach, exit, transit, figure-8), every waypoint carrying an action, every stop turn, the first and last.
+//
+// Method: with the dense route's heights as the reference, split each run of droppable waypoints at the one
+// where a straight leg over the run would sit highest above the reference, until every run is within the
+// tolerance (an estimate); then build the thinned route for real and put back, one per leg, any dropped
+// waypoint the real heights still exceed the tolerance at, until none is left.
+export function thinRoute(plan: Plan, route: Route, dense: Route<FlightWp>, elev: ElevFn): Route<FlightWp> {
+  const tol = plan.o.thinToleranceM;
+  const { wps } = route;
+  const n = wps.length;
+  const before = n;
+  if (!(tol > 0) || n < 3) return { ...dense, thinned: { before, after: n } };
+  const r = dense.wps.map(w => w.h);
+  const cum = [0];
+  for (let i = 1; i < n; i++) cum.push(cum[i - 1] + dist(wps[i - 1].xy, wps[i].xy));
+  const keep = wps.map((w, i) => i === 0 || i === n - 1 || w.role !== 'line' || w.actions.length > 0 || isStop(w) || w.aglM != null);
+
+  // Estimate pass: the leg a→b will sit at least at the highest reference in [a, b]; the worst excess is at
+  // the lowest reference between them. A peak inside the run that stands more than the tolerance above both
+  // ends is kept first, so the legs on either side of it can come back down instead of carrying its height.
+  const split = (a: number, b: number): void => {
+    if (b - a < 2) return;
+    let hi = -Infinity, hiAt = -1, lo = Infinity, loAt = -1;
+    for (let i = a + 1; i < b; i++) {
+      if (r[i] > hi) { hi = r[i]; hiAt = i; }
+      if (r[i] < lo) { lo = r[i]; loAt = i; }
+    }
+    const top = Math.max(hi, r[a], r[b]);
+    if (top - lo <= tol) return;
+    const at = hi > Math.max(r[a], r[b]) + tol ? hiAt : loAt;
+    keep[at] = true;
+    split(a, at); split(at, b);
+  };
+  let a0 = 0;
+  for (let i = 1; i < n; i++) if (keep[i]) { split(a0, i); a0 = i; }
+
+  // Real pass: build, measure against the reference, put back the worst offender per leg, repeat.
+  let flight: Route<FlightWp> = dense;
+  for (let iter = 0; iter < 30; iter++) {
+    const idx = wps.map((_, i) => i).filter(i => keep[i]);
+    flight = applyHeights(plan, { ...route, wps: idx.map(i => wps[i]) }, elev);
+    let added = 0;
+    for (let k = 0; k < idx.length - 1; k++) {
+      const a = idx[k], b = idx[k + 1];
+      const ha = flight.wps[k].h, hb = flight.wps[k + 1].h, L = cum[b] - cum[a];
+      let worst = tol, at = -1;
+      for (let i = a + 1; i < b; i++) {
+        const f = L > 0 ? (cum[i] - cum[a]) / L : 0;
+        const ex = ha + f * (hb - ha) - r[i];
+        if (ex > worst) { worst = ex; at = i; }
+      }
+      if (at >= 0) { keep[at] = true; added++; }
+    }
+    if (!added) break;
+  }
+  return { ...flight, thinned: { before, after: flight.wps.length } };
+}
+
+// Heights for a route the way the planner exports them: terrain-following heights, then thinning when the
+// plan asks for it. `dense` is the un-thinned result (for the profile display); `flight` is what is flown.
+export function flightRoute(plan: Plan, route: Route, elev: ElevFn): { flight: Route<FlightWp>; dense: Route<FlightWp> } {
+  const dense = applyHeights(plan, route, elev);
+  const flight = plan.o.thinToleranceM > 0 ? thinRoute(plan, route, dense, elev) : { ...dense, thinned: { before: dense.wps.length, after: dense.wps.length } };
+  return { flight, dense };
+}
+
 // Time to fly a route at its per-leg speeds (seconds), horizontal legs only.
 export function routeTimeS(wps: RouteWp[]): number {
   let t = 0;

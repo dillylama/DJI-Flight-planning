@@ -27,6 +27,7 @@ export interface Route<W extends RouteWp = RouteWp> {
   startIdx: number;        // first line flown
   fig8RadiusM: number;
   speedMs: number;
+  thinned?: { before: number; after: number };   // waypoint thinning (heights.ts): counts before and after
 }
 
 export interface BuildOptions {

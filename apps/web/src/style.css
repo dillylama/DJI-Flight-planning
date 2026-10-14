@@ -196,3 +196,5 @@ dialog#preflight .row { justify-content: flex-end; }
 details#profileNew { font-size: 13px; color: var(--muted); }
 details#profileNew summary { cursor: pointer; padding: 4px 0; color: var(--accent); }
 details#profileNew .fields { margin-top: 6px; }
+#profile .flight-ref { fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 3; opacity: .55; }
+#profile .wp.dropped { fill: none; stroke: var(--accent); stroke-width: 1; opacity: .5; }
