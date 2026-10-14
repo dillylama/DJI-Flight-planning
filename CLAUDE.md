@@ -112,7 +112,8 @@ DEM clip (AOI + buffer), offline basemap tiles.
   and turns continuous shooting into takePhoto on distance. The writer now writes exactly that.
 - In flight the L3 shoots RGB every 2.0 s regardless (model colouring), ignoring our distance trigger (G3/G4, 14 Oct
   2026; docs/wpml.md). Luke wants distance-based photos → test `modelColoringEnable 0` + distance takePhoto next.
-- Waypoint cap: 1,040 opened in Pilot 2, 2,013 crashed it → planner cuts sorties at 1,000 (`M400_LIMITS.maxWaypoints`).
+- Waypoint cap: 1,040 opened in Pilot 2 ("ok-ish"), 1,270 and 1,524 import and open but the map can no longer be panned
+  or zoomed (14 Oct 2026), 2,013 crashed it → 1,000 per file stays (`M400_LIMITS.maxWaypoints`); thinning is the lever.
 - Corners between lines are DJI `coordinateTurn` (M400 simulator: 6–7 m/s through a 90° corner at 10 m/s, 4–6 m
   inside it; fly-through pivoted at ~3 m/s). Pilot 2 keeps the mode and its damping on import (test-01c round trip).
 - G2 passed 13 Oct 2026 in the simulator from our app (apps/rc/README.md, docs/safety.md §5a): within 2 m of

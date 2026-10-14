@@ -125,6 +125,8 @@ Pilot 2 also shows a banner on routes that record point cloud: keep the gimbal a
 3. ~~Waypoint speeds above 15 m/s.~~ Done 13 Oct 2026: `test-02` shows 15 m/s and `test-03` 17 m/s, no messages (range 1–25 m/s).
 3b. ~~An export with Pilot 2's "IMU Calibration" switch on.~~ Done 13 Oct 2026, see the table above.
 4. ~~The waypoint cap.~~ Done 13 Oct 2026: 268, 538 and 1,040 waypoints open in Pilot 2 (1,040 is slow to edit); 2,013 crashes it.
+   14 Oct 2026: 1,270 and 1,524 import and open, but the map can no longer be panned or zoomed, so the route cannot be
+   checked or edited on the RC. The usable ceiling is about 1,000; the planner's cap stays there.
    The planner cuts sorties at 1,000. Whether the aircraft accepts that many on upload is for the simulator.
 5. In the simulator: the L3 starts recording on the approach waypoint, the calibration passes fly as expected,
    and the aircraft's path at fly-through waypoints stays close to the straight legs.
