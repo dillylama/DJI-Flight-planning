@@ -98,6 +98,8 @@ DEM clip (AOI + buffer), offline basemap tiles.
 - G1 result (13 Oct 2026, docs/wpml.md): Pilot 2 keeps positions, heights, speeds, turn modes, straight legs and
   record start/stop; it shortens executed damping to ⅓ leg ≤ 10 m, drops aircraftCalibration and the start group,
   and turns continuous shooting into takePhoto on distance. The writer now writes exactly that.
+- In flight the L3 shoots RGB every 2.0 s regardless (model colouring), ignoring our distance trigger (G3/G4, 14 Oct
+  2026; docs/wpml.md). Luke wants distance-based photos → test `modelColoringEnable 0` + distance takePhoto next.
 - Waypoint cap: 1,040 opened in Pilot 2, 2,013 crashed it → planner cuts sorties at 1,000 (`M400_LIMITS.maxWaypoints`).
 - Corners between lines are DJI `coordinateTurn` (M400 simulator: 6–7 m/s through a 90° corner at 10 m/s, 4–6 m
   inside it; fly-through pivoted at ~3 m/s). Pilot 2 keeps the mode and its damping on import (test-01c round trip).

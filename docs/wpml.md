@@ -79,6 +79,14 @@ per-waypoint values would still be safe: `globalHeight` is the **highest** waypo
 
 ## Template payload parameters (L3)
 `returnMode sedecupleReturn` (16 returns), `samplingRate 350000` (Hz), `scanningMode repetitive`, `modelColoringEnable 1`.
+
+**RGB photos are on a 2 s timer, not our distance trigger (G3 and G4, 14 Oct 2026).** On both flights every photo
+of both cameras came exactly 2.00 s after the previous one (G4: 257 of 259 gaps at 2.0 s), whatever the speed: 3–5 m
+apart on the slowed legs, 20 m apart at 10 m/s. The `takePhoto` groups on `multipleDistance` (37.6 m on G4) left no
+trace. That is the L3's model-colouring capture (`modelColoringEnable 1`), which runs on its own clock while the point
+cloud records. Luke wants distance-based photos. Next test: a file with `modelColoringEnable 0` and the distance
+`takePhoto` groups, to see whether the L3 then honours the distance trigger and whether Terra still colours the
+cloud from those photos.
 Only these spellings are verified. The writer refuses other return and scan modes until a sample shows them.
 
 ## Area-route extras (for reference)
