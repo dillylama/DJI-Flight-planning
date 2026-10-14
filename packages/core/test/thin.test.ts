@@ -72,7 +72,7 @@ test('the thinned route never sits below the dense requirement and never more th
     void lastD;
     // and the exported file passes the independent check exactly like an un-thinned one
     const files = writeWpml(flight, { takeoff: { flyToMode: 'safely', takeoffSecurityM: 60, transitSpeedMs: 15 } });
-    const rep = verifyRouteFiles(files.templateKml, files.waylinesWpml, { elev: terrain, aglM: plan.o.aglM, corridorM: plan.o.corridorM, maxClimbMs: plan.o.climbMs, maxDescentMs: plan.o.descentMs, maxSpeedMs: 20 });
+    const rep = verifyRouteFiles(files.templateKml, files.waylinesWpml, { elev: terrain, aglM: plan.o.aglM, corridorM: plan.o.corridorM, maxClimbMs: plan.o.climbMs, maxDescentMs: plan.o.descentMs, maxSpeedMs: 20, lidar: false });
     assert.ok(rep.ok, `tol ${tol}: ${rep.issues.map(i => i.message).join(' | ')}`);
     assert.ok(rep.minClearanceM >= plan.o.aglM - 0.01);
   }
