@@ -45,6 +45,14 @@ PPK (L1+L2+L5, fixed throughout) minus the aircraft's RTK at the 267 photos with
 The 2 cm vertical offset is constant and most likely the base antenna model (ADVNULLANTENNA broadcast) versus RTKLIB's
 handling; to be checked against a ground control point before PPK heights are used in anger.
 
+**G4 (same day, 14:57–15:08, lines 240–446 m above the base):** 3,355 epochs, 100 % fixed with the same configuration;
+518 photos, 180 recovered from JPG metadata (lever arms within 1 mm of the G3 fit). PPK − RTK at the 338 photos with MRK
+offsets: north −0.4 cm (rms 0.5), east +0.2 cm (rms 0.5), **up −5.4 cm (rms 5.5, spread −7.8 … −2.7)**. The vertical
+offset grew with the height above the base (G3 flew ~190 m above it, G4 up to 450 m), which points at tropospheric
+modelling (RTKLIB Saastamoinen vs the aircraft's RTK engine) rather than an antenna constant. Either way it is a
+few centimetres and systematic; the GCP check decides who is right. The RPT noted 34 s of lost base corrections
+and one stage-1 wind warning; neither affected the fix.
+
 ## Recipe (what `tools/` does; run from the repo root)
 
 1. Base: Emlid Flow RINEX export. Trim the 12-hour log to the flight window plus 5 min:
