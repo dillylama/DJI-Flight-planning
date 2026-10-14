@@ -40,7 +40,11 @@ DEM clip (AOI + buffer), offline basemap tiles.
   passed, per sortie, never on demo terrain, and `run()` leaves no result when compute throws.
   After changing planner maths or its tests run `npm run mutation` (breaks the planner 21 ways; every one
   must be caught by the suite).
-- **Figure-8** (IMU excitation) before the first line, before any resumed segment, AND after the last line
+- **Planner UI (14 Oct 2026)**: figure-8 controls removed (DJI IMU calibration does the job on the L3; core keeps the
+  code and tests). Everyday fields in view, the rest under "Advanced". Base-map selector (Esri imagery, OSM,
+  OpenTopoMap, Esri topo; remembered per browser) and a place search (Nominatim, or "lat, lon") in the map toolbar.
+  Sync-to-RC section collapsed as "not in use". "Resume" renamed "Continue from a line" (new landing zone).
+- **Figure-8** (IMU excitation, core only, off in the planner) before the first line, before any resumed segment, AND after the last line
   (vendors + DJI L2/L3 manuals: align at both ends for forward/backward trajectory processing). Recording runs
   from the approach waypoint (START_RECORD) through the end figure-8 to the exit waypoint (STOP_RECORD).
   Straight level run ≥ alignStraightS (12 s) or 2.5 r before the first 8 and after the last.
