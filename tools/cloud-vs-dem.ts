@@ -115,6 +115,7 @@ for (const c of cells.values()) {
   rows.push({ dz: zEgm - dem, agl: r.dist <= corridorM ? r.h - zEgm : null, dist: r.dist, n: c.n });
 }
 const q = (a: number[], p: number) => a.length ? a[Math.min(a.length - 1, Math.floor(p * a.length))] : NaN;
+if (!rows.length) { console.error('no cells with points: wrong coordinate option, or no points of that class (Terra writes class 2 only when ground classification was switched on)'); process.exit(1); }
 const dzAll = rows.map(r => r.dz).sort((a, b) => a - b);
 const stat = (a: number[]) => { const m = a.reduce((x, y) => x + y, 0) / a.length; return `mean ${m.toFixed(2)} m, rms ${Math.sqrt(a.reduce((x, y) => x + y * y, 0) / a.length).toFixed(2)} m, 5–95 % ${q(a, 0.05).toFixed(1)}…${q(a, 0.95).toFixed(1)} m, extremes ${a[0].toFixed(1)}…${a[a.length - 1].toFixed(1)} m`; };
 console.log(`\ncloud ground − GLO-30 DEM, ${rows.length} cells: ${stat(dzAll)}`);
