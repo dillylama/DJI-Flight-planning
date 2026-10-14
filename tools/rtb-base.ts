@@ -36,3 +36,9 @@ const h = noAh ? 0 : s0.h;
 const x = s0.x + h * Math.cos(lat) * Math.cos(lon), y = s0.y + h * Math.cos(lat) * Math.sin(lon), z = s0.z + h * Math.sin(lat);
 console.log(`${seen.length} station messages, antenna "${antenna || '?'}", broadcast antenna height ${s0.h.toFixed(4)} m, position ${moved ? 'MOVED during the flight' : 'constant'}`);
 console.log(`base ECEF for rnx2rtkp -r: ${x.toFixed(4)} ${y.toFixed(4)} ${z.toFixed(4)}`);
+if (args.includes('--geodetic')) {
+  // the same point as latitude, longitude, ellipsoidal height (what DJI Terra asks for when the base position is typed in)
+  const pr2 = Math.hypot(x, y); let la = Math.atan2(z, pr2), hh = 0;
+  for (let k = 0; k < 10; k++) { const N = a / Math.sqrt(1 - e2 * Math.sin(la) ** 2); hh = pr2 / Math.cos(la) - N; la = Math.atan2(z, pr2 * (1 - e2 * N / (N + hh))); }
+  console.log(`base geodetic (WGS84, ellipsoidal height): ${(la * 180 / Math.PI).toFixed(8)} ${(Math.atan2(y, x) * 180 / Math.PI).toFixed(8)} ${hh.toFixed(3)}`);
+}
