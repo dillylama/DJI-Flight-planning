@@ -60,8 +60,14 @@ DEM clip (AOI + buffer), offline basemap tiles.
   `node tools/compare-ftr.ts route.kmz FTR_Record_….txt --mrk photos.MRK` (flown track from Pilot 2's replay record
   on the RC, `/sdcard/DJI/com.dji.industry.pilot/FlightRecord/FlightTaskReplay/`, and the L3's RTK photo positions,
   against the route; G3 result in docs/safety.md §5a).
-- PPK (open, docs/ppk-notes.md): the L3 card holds `.RTK` (rover RTCM3 at 5 Hz), `.RTB` (base RTCM3) and `.MRK`
-  (per-photo RTK position + antenna offsets). Next step needs a base RINEX for the flight window.
+- PPK (proven on G3, docs/ppk-notes.md has the recipe): L3 card `.RTK` = rover RTCM3 at 5 Hz, `.RTB` = base RTCM3
+  (its 1006 position, without antenna height, is what the aircraft used), `.MRK` = per-photo RTK position + offsets,
+  JPG XMP `UTCAtExposure` = GPST. Tools: `trim-rinex.ts`, `rtb-base.ts`, `ppk-drone.conf` (rnx2rtkp -k; L1+L2+L5 →
+  100 % fixed), `ppk-cameras.ts` (PPK − MRK check, camera CSV, recovers photos missing from the MRK). RTKLIB demo5 in
+  `C:\Claude\rtklib\`. G3: PPK − RTK 0.5 cm horizontal, 2.4 cm vertical.
+- G4 flown 14 Oct 2026 (valley at home, lines 240–446 m above home): file flown within −0.6…+0.3 m; the aircraft's own
+  waypoint-mission limits are ≈3.7 m/s up / 2.6 m/s down (planner assumes 4 / 3: safe, costs time). Point-cloud DEM
+  check pending (DJI Terra).
 
 ## SDK facts (see docs/msdk-research.md for sources)
 - MSDK **5.18.0**; M400 since 5.15, L3 since 5.17. Kotlin 2.1, AGP 8.7, Gradle 8.12, JDK 17,

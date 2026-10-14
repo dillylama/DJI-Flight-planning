@@ -1,81 +1,79 @@
-# PPK for the L3 (post-processed kinematic) — investigation notes
+# PPK for the L3 (post-processed kinematic): proven on G3, 14 Oct 2026
 
-Luke, 14 Oct 2026: "I think this means I can now PPK the flight? This was a huge problem before when using Metashape
-as I would have to fly in RTK, which is not always possible. Post-processing is a much better option." Status: open,
-findings so far below. Nothing here has been run end to end yet.
+Luke: "I think this means I can now PPK the flight? This was a huge problem before when using Metashape as I would
+have to fly in RTK, which is not always possible. Post-processing is a much better option." Answer: yes. The L3 always
+records what PPK needs, and a scripted RTKLIB pipeline reproduces the aircraft's RTK positions to the centimetre.
 
-## What the L3 wrote on the card (G3 flight, 14 Oct 2026, `DCIM/DJI_<date>_008_<route name>/`)
+## What the L3 writes on the card (`DCIM/DJI_<date>_<n>_<route name>/`)
 
-| File | Size | What it is (verified by reading the bytes) |
-|---|---|---|
-| `…_L.RTK` | 3.1 MB | **Rover GNSS raw data as an RTCM3 stream**: 16,177 frames, every CRC valid. MSM5 observations for GPS (1075), GLONASS (1085), Galileo (1095) and BeiDou (1125) at 5 Hz, ephemerides (1019, 1020, 1046) and a proprietary 4011 message once per second. This is the PPK rover file. |
-| `…_L.RTB` | 0.3 MB | **Base corrections the aircraft received, RTCM3**: 2,442 frames, all valid. Station position 1006 and antenna 1033 every 10 s, MSM4 observations (1074, 1084, 1094, 1124) at 1 Hz. On the G3 flight the base was the network RTK service; with a D-RTK base this file would be its stream. |
-| `…_L.RTL` | 0.5 MB | Not RTCM (no valid frames). Unknown; probably DJI's own log. |
-| `…_Timestamp.MRK` | 56 KB | One line per photo (left and right camera, `0003_LV`, `0003_RV`): GPS time of exposure, antenna-to-camera offset (N, E, V in mm), the RTK position and ellipsoidal height at exposure, standard deviations, and fix quality (`50,Q` = RTK fixed). Same format DJI uses for P1/L1/L2 PPK. |
-| `…_L.IMU`, `.RPOS`, `.LDR`, `.LDRT`, `.DBG` | 4 MB … 3.9 GB | IMU, real-time positions, raw and real-time LiDAR frames, debug. Proprietary; DJI Terra only. |
-| `…_L.CLI`, `.CLC` | <1 KB | Factory calibration: LiDAR-to-IMU and LiDAR-to-camera (two RGB cameras, serials listed). |
-| `…_D.RPT` | 140 KB | Mission report JSON (binary header + trailer): 410 photos all RTK fixed, 409 of 410 recording seconds RTK fixed, no RTB loss, no wind warnings. |
-| `…_L.SIG` | 3 KB | A signature block titled `PPK_SERVICE_TYPE` listing the mission files. DJI signs the raw data for its own PPK service (DJI Terra). |
+| File | What it is (verified by reading the bytes) |
+|---|---|
+| `…_L.RTK` | **Rover GNSS raw data, RTCM3**: MSM5 observations for GPS (1075), GLONASS (1085), Galileo (1095), BeiDou (1125) at 5 Hz, ephemerides (1019, 1020, 1046), a proprietary 4011 once per second. The PPK rover file. |
+| `…_L.RTB` | **Base corrections the aircraft received, RTCM3**: 1006 station position and 1033 antenna every 10 s, MSM4 (1074, 1084, 1094, 1124) at 1 Hz. Carries the base position the aircraft used in flight. |
+| `…_Timestamp.MRK` | One line per photo (`0003_LV`, `0003_RV`: left and right camera): GPS seconds of week + week, antenna→camera offset N/E/V in mm, RTK position and ellipsoidal height at exposure, standard deviations, fix quality (`50,Q` = fixed). |
+| `…_D.RPT` | Mission report JSON (binary header + trailer): photo count and RTK state, recording seconds fixed, base loss, wind warnings. |
+| `…_L.CLI`, `.CLC` | Factory calibration: LiDAR-to-IMU and LiDAR-to-camera (both RGB cameras). |
+| `…_L.SIG` | Signature block `PPK_SERVICE_TYPE` listing the mission files (DJI signs the raw data for its own PPK service). |
+| `…_L.RTL`, `.IMU`, `.RPOS`, `.LDR`, `.LDRT`, `.DBG` | Proprietary; DJI Terra only. |
+| JPG / DNG | XMP `drone-dji:` block with `UTCAtExposure` to the microsecond (**GPST, despite the name**: it equals the MRK time exactly, verified against the flight record), RTK position, flight yaw/pitch/roll, RtkFlag, RtkStd. |
 
-Conclusion so far: the aircraft **always** records what PPK needs, whether or not it had a fix in flight. The MRK on the
-G3 flight is RTK-fixed because the network RTK worked; on a flight without corrections the MRK would carry single-point
-positions and the `.RTK` file would still hold the raw observations.
+Findings on the G3 data:
+- **Base position.** The base RINEX header carries the receiver's single-point position (about 1 m off). The aircraft
+  uses the RTCM 1006 position from the `.RTB` **as broadcast, without adding the antenna height**: PPK − RTK heights
+  were −1.7 cm that way and +7.8 cm with the 0.095 m height added. `node tools/rtb-base.ts file.RTB` prints the value
+  for `rnx2rtkp -r`.
+- **MRK offsets.** `Lat/Lon/Ellh` in the MRK are camera positions. PPK antenna position + N/E/V offsets (V positive =
+  camera below the antenna) reproduces them to 0.5 cm horizontally; without the offsets the error is 50 cm.
+- **Missing MRK times.** 143 of 410 MRK lines had no exposure time (`-259200`) and zero offsets, both cameras, no
+  pattern. Every JPG carries the exposure time in its XMP, and the offsets follow from a body-frame lever arm (fitted on
+  the lines that have them, rotated by the photo's attitude; LV 582/−413/238 mm, RV 583/−356/238 mm fwd/right/down,
+  residuals ≤ 2 cm). `tools/ppk-cameras.ts --photos <dir>` does both, so every photo gets a PPK position.
+- **Fix rate.** Default RTKLIB options: 8–11 % fixed. The demo5 configuration in `tools/ppk-drone.conf`: L1+L2 60 %,
+  elevation mask 20° 93 %, **L1+L2+L5 100 %** of 2,817 epochs. In the combined solution even the float epochs agreed with
+  the RTK to 1 cm horizontally and 4 cm vertically.
 
-**MRK finding (G3 data):** only 267 of the 410 photo lines carry an exposure time; 143 have `-259200.000000 [-522]`
-and zero offsets, although they still carry an RTK position and `50,Q`. Both cameras (`_LV`, `_RV`) are affected, in no
-obvious pattern. Those photos cannot be placed on a PPK trajectory from the MRK alone. To investigate: whether the
-exposure time can be recovered from the DNG/JPG metadata (DJI writes GPS time in XMP), and whether the photo interval
-(our `takePhoto` on distance, about 2 s apart with two cameras firing) is simply too fast for the L3's event marker.
+## Result (G3, 14 Oct 2026, RS4 base about 1.5 km from the block, 5 Hz, RINEX 3.03 from Emlid Flow)
 
-The base position the aircraft used in flight is in the `.RTB` 1006 message (ECEF, 0.1 mm, with the broadcast antenna
-height), not in the base RINEX header (which carries the receiver's single-point position, about 1 m off). PPK must use
-the 1006 position or the result will not match the RTK flight: `node tools/rtb-base.ts file.RTB` prints it in the form
-`rnx2rtkp -r` takes.
+PPK (L1+L2+L5, fixed throughout) minus the aircraft's RTK at the 267 photos with MRK offsets:
 
-## Two separate PPK problems
+| | mean | rms | spread |
+|---|---|---|---|
+| north | −0.1 cm | 0.5 cm | −1.4 … +0.9 cm |
+| east | +0.1 cm | 0.4 cm | −0.9 … +0.9 cm |
+| up | −2.3 cm | 2.4 cm | −4.3 … −0.6 cm |
 
-1. **The LiDAR trajectory** (point cloud). DJI Terra processes L3 data and accepts a base-station RINEX observation file
-   for PPK (DJI's PPK workflow for L1/L2: put the base `.obs` or RINEX `.yyO` file in the mission folder, Terra then
-   post-processes the trajectory instead of trusting the in-flight RTK). The L3 is only processed in Terra, so this is
-   the only route for the point cloud. To test on the G3 data: a base RINEX covering 13:40–13:48 SAST on 14 Oct 2026
-   is needed (own base, or a TrigNet CORS station near Prince Albert).
-2. **The RGB photos** (Metashape). Metashape does not read the `.RTK` file. The route is: convert `.RTK` (RTCM3) to
-   RINEX with RTKLIB `convbin` (`-r rtcm3`, and give it the date, since RTCM carries only time of week), post-process
-   against the base RINEX with `rnx2rtkp` (or Emlid Studio) into a `.pos` trajectory, interpolate each MRK exposure
-   time on that trajectory, apply the MRK antenna offsets, and write a camera-position CSV for Metashape. Forum users
-   report exactly this for L1/L2 (rename `.RTK`/`PPKRAW.bin` to `.RTCM3` for Emlid Studio). Nothing DJI-specific in the
-   way; the one check is the mapping of the MRK time stamps (GPS seconds + week) to the RINEX epochs.
+The 2 cm vertical offset is constant and most likely the base antenna model (ADVNULLANTENNA broadcast) versus RTKLIB's
+handling; to be checked against a ground control point before PPK heights are used in anger.
 
-## Base data for the G3 flight
+## Recipe (what `tools/` does; run from the repo root)
 
-Luke's Emlid Reach RS4 was logging at the time (it records continuously, 12-hour files). Flight window 13:39–13:50 SAST
-= 11:39–11:50 UTC on 14 Oct 2026; trim the base log to 11:30–11:55 UTC with `node tools/trim-rinex.ts` (RINEX 2 or
-3 observation files; navigation files stay whole). Files go in `samples/g3/base/` (local, gitignored) with a copy in
-`SynologyDrive\3dronemapping\Drones\M400\Flights\2026-10-14 G3 home block\base\` (NAS + C2 backup).
+1. Base: Emlid Flow RINEX export. Trim the 12-hour log to the flight window plus 5 min:
+   `node tools/trim-rinex.ts base.26O base-trim.26O --from "2026-10-14 11:30:00" --to "2026-10-14 11:55:00"` (UTC).
+2. Rover: `convbin.exe -r rtcm3 -tr 2026/10/14 11:30:00 -v 3.04 -od -os -oi -ot -ol -o rover.obs -n rover.nav rover.rtcm3`
+   (copy the `.RTK` next to the output as `rover.rtcm3`; RTKLIB opens no `..\` paths). RTKLIB demo5 2.5.1 (rtklibexplorer)
+   is in `C:\Claude\rtklib\RTKLIB_EX_2.5.1\`.
+3. Base position: `node tools/rtb-base.ts file.RTB` → `x y z`.
+4. Solution: `rnx2rtkp.exe -k tools/ppk-drone.conf -r x y z -o flight.pos rover.obs base-trim.26O rover.nav base.26P`
+   (all files in one folder; the conf is combined forward+backward, kinematic, fix-and-hold, L1+L2+L5).
+5. Cameras: `node tools/ppk-cameras.ts flight.pos photos.MRK --photos <JPG folder> --out cameras.csv`
+   → CSV `photo, gpst_s, lat, lon, ellipsoidal_height, q, sd_n, sd_e, sd_u, offset_source, …` for Metashape
+   (WGS84 ellipsoidal heights; convert to the project datum in Metashape).
+6. Point cloud: DJI Terra with the base RINEX for a PPK trajectory (not yet tried; DJI's L1/L2 workflow puts the base
+   `.obs` in the mission folder).
 
-Tools on this PC: Emlid Studio is installed (`C:\Program Files\Emlid Studio`) but its converter and post-processing
-programs are GUI back-end services, not command-line tools. For a scripted pipeline RTKLIB's `convbin` and `rnx2rtkp`
-(rtklibexplorer demo5 build) are needed; not installed yet.
+## To do
 
-## To do (in order)
+- [ ] Field rule: fly RTK when corrections exist, log the RS4 always; PPK the photos as standard, point cloud via Terra PPK.
+- [ ] Check the 2 cm vertical offset against a surveyed point.
+- [ ] Try the Terra PPK route for the point cloud with the same base file (G3 and G4 data).
+- [ ] Run the recipe on a flight without RTK corrections (the real use case) and compare with a Terra PPK trajectory.
+- [ ] RTKLIB and the recipe belong in a small script (`tools/ppk.ps1`) once the Terra step is settled.
 
-- [x] Base data: RS4 log for 14 Oct 2026 (Luke, in progress).
-- [ ] Trim the base log to the flight window; convert to RINEX if the RS4 wrote UBX/raw.
-- [ ] `convbin` the `.RTK` to RINEX; check epoch count (expect ~5 Hz × 563 s) and the four constellations.
-- [ ] `rnx2rtkp` kinematic solution; compare its positions at the MRK times with the MRK's own RTK positions (should
-      agree to a few cm on a flight that was RTK-fixed throughout, which is the acceptance test for the pipeline).
-- [ ] Small tool `tools/ppk-cameras.ts`: `.pos` + `.MRK` → camera CSV (lat, lon, ellipsoidal height, accuracy) for
-      Metashape, with the antenna offsets applied.
-- [ ] Try the Terra PPK route for the point cloud with the same base file.
-- [ ] Then decide the field rule: fly RTK when available, but PPK is the fallback and the primary for photos.
-
-## Sources (third-party, to be confirmed on our data)
+## Sources (third-party)
 
 - Emlid community: [PPK on DJI Matrice 350 with Zenmuse L2](https://community.emlid.com/t/ppk-on-dji-matrice-350-with-zenmuse-l2/41543),
   [DJI L2 PPK processing](https://community.emlid.com/t/dji-l2-ppk-processing/38965),
-  [RTK and PPK using M300 & L1](https://community.emlid.com/t/rtk-and-ppk-using-m300-l1/36709),
-  [What is a RINEX navigation file and an MRK file](https://community.emlid.com/t/what-is-a-rinex-navigation-file-and-an-mrk-file/31289)
-- DJI Enterprise Insights: [PPK workflow for DJI Enterprise drones](https://enterprise-insights.dji.com/blog/ppk-post-processed-kinematics-workflow),
-  [Geospatial solutions FAQ](https://enterprise-insights.dji.com/de/blog/geospatial-solutions-faq)
+  [RTK and PPK using M300 & L1](https://community.emlid.com/t/rtk-and-ppk-using-m300-l1/36709)
+- DJI Enterprise Insights: [PPK workflow for DJI Enterprise drones](https://enterprise-insights.dji.com/blog/ppk-post-processed-kinematics-workflow)
 - LP360: [DJI PPK utility](https://support.lp360.com/hc/en-us/articles/38545494922515)
-- DJI forum: [Terra file naming for L1 PPK](https://forum.dji.com/thread-272718-1-1.html)
+- RTKLIB demo5: [rtklibexplorer/RTKLIB releases](https://github.com/rtklibexplorer/RTKLIB/releases)
