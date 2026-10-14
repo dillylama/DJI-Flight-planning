@@ -68,7 +68,9 @@ DEM clip (AOI + buffer), offline basemap tiles.
 - G4 flown 14 Oct 2026 (valley at home, lines 240–446 m above home): file flown within −0.6…+0.3 m; the aircraft's own
   waypoint-mission limits are ≈3.7 m/s up / 2.6 m/s down (planner assumes 4 / 3: safe, costs time). Point-cloud DEM
   check: `node tools/cloud-vs-dem.ts cloud.las dem.tif route.kmz --utm 34S --every 4 --agl N` (Terra LAS 1.4 in
-  UTM, ellipsoidal heights). G3: ground within −5…+5 m of GLO-30, AGL never below 107 vs 100. G4 cloud pending.
+  UTM, ellipsoidal heights). G3: ground within −5…+5 m of GLO-30, AGL never below 107 vs 100. G4 (45° walls): ground
+  −23…+12 m from GLO-30, ≤ 11.6 m above it under the route, AGL never below 213 vs 200. **All four gates passed
+  14 Oct 2026**; next is a production job with the rules in docs/safety.md.
 
 ## SDK facts (see docs/msdk-research.md for sources)
 - MSDK **5.18.0**; M400 since 5.15, L3 since 5.17. Kotlin 2.1, AGP 8.7, Gradle 8.12, JDK 17,

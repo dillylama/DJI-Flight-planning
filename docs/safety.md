@@ -182,7 +182,16 @@ below a leg, pass distance ≤ 0.7 m on the lines and 6 m inside the coordinated
 said 2.6–4.0. Its own waypoint-mission limits are therefore about 3.7 m/s up and 2.6 m/s down, below the 4 / 3 the
 planner assumes, so the planner's slowed legs are on the safe side of the aircraft's behaviour and the only effect is
 time (the G4 lines took 10.3 min against 7.5 planned). Candidate change: planner defaults climb 3.5, descent 2.5 m/s
-for honest timing. The DEM side of G4 (real ground vs GLO-30 on the walls) waits for the point cloud from DJI Terra.
+for honest timing.
+
+**G4 point cloud against the DEM (Terra, PPK trajectory against the RS4 base, 22.8 M points).** Lowest point per 10 m
+cell, EGM96, against GLO-30 over the valley walls: 4,096 cells, mean −0.2 m, rms 3.3 m, 5–95 % −6.5…+3.3 m, extremes
+−23.4…+11.9 m. Inside the ±40 m corridor (935 cells) the real ground was up to **11.6 m above the DEM** (rms 4.2 m).
+Measured AGL under the route: lowest 213 m against 200 planned, because the corridor rule had already lifted the lines
+over the highest cell near them. So on 45° slopes GLO-30 is wrong by up to ±12 m in the dangerous direction and ±23 m
+in the other; the planner's 20 m uncertainty allowance covers the worst of it with 8 m to spare, and the corridor lift
+on top of that kept the aircraft 13 m above plan at the tightest point. G4 passed. Rules for a job stand as written:
+GLO-30 with the 20 m allowance, never below 100 m AGL, obstacle survey done.
 
 ## 6. What none of this covers
 
@@ -209,7 +218,7 @@ Items 4 and 5 are what the gates are for.
 | G1 | Import the test files into Pilot 2; save and re-export `test-01`; `tools/compare-kmz.ts` | Heights within 0.1 m, speeds, damping, `useStraightLine`, actions unchanged; cap known |
 | G2 | DJI simulator, props off: full route, RTH mid-line | **Passed 13 Oct 2026** (section 5a). RC loss not simulated. |
 | G3 | Live, open ground, RTK fixed | **Passed 14 Oct 2026** at the home block (100 m AGL, 6 lines): height at waypoint 1 186 m vs 186 m planned; flight record within −2.6…+0.3 m of the file at all 48 waypoints, L3 RTK photo heights within −2.0…+0.4 m of the route; L3 recorded, calibration passes flown, no messages. Point cloud (Terra): real ground within −5.0…+5.3 m of GLO-30, measured AGL never below 107 m against 100 planned. |
-| G4 | Live, real slopes, planned 100 m higher than the job needs | **Flown 14 Oct 2026** across the home valley (ground −4…+223 m, lines 240–446 m above home): flight record within −0.6…+0.3 m of the file at all 46 waypoints, slowest leg flown 1.7 m/s (file 2.6), no leg at the floor; L3 RTK photo heights (518, all fixed) within −1.0…+0.9 m of the route; PPK reproduces them to 0.5 cm horizontally. **Pending:** measured AGL from the point cloud never below plan − 10 m (DJI Terra). |
+| G4 | Live, real slopes, planned 100 m higher than the job needs | **Passed 14 Oct 2026** across the home valley (ground −4…+223 m, lines 240–446 m above home): flight record within −0.6…+0.3 m of the file at all 46 waypoints, slowest leg flown 1.7 m/s (file 2.6), no leg at the floor; L3 RTK photo heights (518, all fixed) within −1.0…+0.9 m of the route. Point cloud (Terra, PPK): real ground within −23…+12 m of GLO-30 on the walls, never more than 11.6 m above it under the route; measured AGL never below 213 m against 200 planned. |
 | Job | Step down only if G4 held | Obstacle survey done; never below 100 m AGL on GLO-30 |
 
 ## 8. Pre-flight, every route
