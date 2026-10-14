@@ -211,3 +211,4 @@ details.adv > summary::before { content: "▸ "; }
 details.adv[open] > summary::before { content: "▾ "; }
 details.adv > .fields { margin-top: 8px; }
 details.adv .sensor-note { grid-column: span 2; }
+.corner { width: 14px; height: 14px; border-radius: 50%; background: var(--c-aoi); border: 2px solid #fff; cursor: grab; box-shadow: 0 0 0 2px rgba(0,0,0,.4); }
