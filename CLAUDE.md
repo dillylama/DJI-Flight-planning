@@ -44,6 +44,9 @@ DEM clip (AOI + buffer), offline basemap tiles.
   code and tests). Everyday fields in view, the rest under "Advanced". Base-map selector (Esri imagery, OSM,
   OpenTopoMap, Esri topo; remembered per browser) and a place search (Nominatim, or "lat, lon") in the map toolbar.
   Sync-to-RC section collapsed as "not in use". "Resume" renamed "Continue from a line" (new landing zone).
+  Start corner (`startSide` left/right of the course, `startEnd` near/far; plan.ts orders the lines and sets the
+  first direction; compass names in the UI), "Zoom to block", "Clear mission", "Follow contours (auto course)" =
+  the course optimiser (lines along the slope).
 - **Figure-8** (IMU excitation, core only, off in the planner) before the first line, before any resumed segment, AND after the last line
   (vendors + DJI L2/L3 manuals: align at both ends for forward/backward trajectory processing). Recording runs
   from the approach waypoint (START_RECORD) through the end figure-8 to the exit waypoint (STOP_RECORD).

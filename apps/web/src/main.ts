@@ -137,6 +137,8 @@ const UNC_MAX = 200, RTH_MIN = 20, RTH_MAX = SAFETY.maxAboveHomeM;
   for (const f of FIELDS) if (state.params[f.key] != null && !inRange(state.params[f.key], f.min, f.max)) delete state.params[f.key];
   for (const f of TK_FIELDS) if (state.takeoff[f.key] != null && !inRange(state.takeoff[f.key], f.min, f.max)) delete state.takeoff[f.key];
   if (state.params.verticalMode != null && state.params.verticalMode !== 'slow' && state.params.verticalMode !== 'raise') delete state.params.verticalMode;
+  if (state.params.startSide != null && state.params.startSide !== 'left' && state.params.startSide !== 'right') delete state.params.startSide;
+  if (state.params.startEnd != null && state.params.startEnd !== 'near' && state.params.startEnd !== 'far') delete state.params.startEnd;
   for (const k of Object.keys(state.params) as (keyof PlanOptions)[]) if (!FIELDS.some(f => f.key === k) && k !== 'verticalMode') delete state.params[k];
   if (state.takeoff.rthHeightM != null && !inRange(state.takeoff.rthHeightM, RTH_MIN, RTH_MAX)) state.takeoff.rthHeightM = null;
   if (state.takeoff.flyToMode != null && state.takeoff.flyToMode !== 'safely' && state.takeoff.flyToMode !== 'pointToPoint') delete state.takeoff.flyToMode;
@@ -185,7 +187,7 @@ app.innerHTML = `
     <h2>Block</h2>
     <label class="drop"><input type="file" id="fileBlock" accept=".kmz,.kml" hidden />
       <strong>Drop KMZ / KML</strong><span>or click to choose. Largest polygon is used.</span></label>
-    <button id="loadDemo" class="link">Load demo block (synthetic Nimba ridge)</button>
+    <div class="row"><button id="zoomBlock" class="ghost" disabled>Zoom to block</button><button id="clearMission" class="ghost" disabled>Clear mission</button><button id="loadDemo" class="link">Demo block</button></div>
     <div class="note" id="blockInfo"></div>
   </section>
   <section>
@@ -229,6 +231,7 @@ app.innerHTML = `
   <section>
     <h2>Flight</h2>
     <div class="fields" id="fields">${FIELDS.filter(f => !f.adv).map(f => fieldHtml(f, 'plan')).join('')}
+      <label><span class="lt">Start corner ${ti('startCorner')}</span><select id="startCorner"><option value="left-near"></option><option value="right-near"></option><option value="left-far"></option><option value="right-far"></option></select></label>
       <label class="span2"><span class="lt">Vertical profile ${ti('verticalMode')}</span>
         <select id="vmodeSel"><option value="slow">Follow terrain; slow down to the climb/descent limits</option><option value="raise">Keep line speed; raise waypoints (gradient limit)</option></select></label>
       <details class="span2 adv"><summary>Advanced</summary><div class="fields">
@@ -236,7 +239,7 @@ app.innerHTML = `
         <label><span class="lt">Terrain + position uncertainty <em>m</em>${ti('uncertaintyM')}</span><input type="number" id="uncIn" step="5" min="${SAFETY.uncertaintyMinM}" max="${UNC_MAX}" /></label>
       </div></details>
     </div>
-    <div class="row"><button id="optCourse" class="ghost" disabled${btnTip('optCourse')}>Optimise course</button><button id="resetParams" class="link">Reset defaults</button></div>
+    <div class="row"><button id="optCourse" class="ghost" disabled${btnTip('optCourse')}>Follow contours (auto course)</button><button id="resetParams" class="link">Reset defaults</button></div>
   </section>
   <section>
     <h2>Home &amp; aircraft</h2>
@@ -342,6 +345,7 @@ function syncFields() {
   document.querySelectorAll<HTMLInputElement>('input[data-group]').forEach(i => {
     i.value = String(i.dataset.group === 'plan' ? P(i.dataset.key as keyof PlanOptions) : T(i.dataset.key as keyof TakeoffOptions));
   });
+  refreshStartCorner();
   $<HTMLInputElement>('rthHeight').value = state.takeoff.rthHeightM != null ? String(state.takeoff.rthHeightM) : '';
   $<HTMLSelectElement>('flyToMode').value = state.survey.transitInRoute ? 'route' : T('flyToMode');
   const ps = $<HTMLSelectElement>('profileSel');
@@ -439,6 +443,33 @@ $('pfDel').onclick = () => {
   change();
 };
 $('resetParams').onclick = () => { state.params = {}; change(); };
+// Start corner: names follow the compass for the current course. Left/right are seen looking along the course;
+// 'near' is the end behind you, so for course 90 (lines east–west) left-near is the north-west corner.
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+const compass = (deg: number) => COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+function refreshStartCorner() {
+  const c = P('courseDeg');
+  const side = { left: compass(c - 90), right: compass(c + 90) }, end = { near: compass(c + 180), far: compass(c) };
+  const sel = $<HTMLSelectElement>('startCorner');
+  for (const o of Array.from(sel.options)) {
+    const [s, e] = o.value.split('-') as ['left' | 'right', 'near' | 'far'];
+    o.textContent = `${side[s]} side, ${end[e]} end`;
+  }
+  sel.value = `${P('startSide')}-${P('startEnd')}`;
+}
+$('startCorner').addEventListener('change', e => {
+  const [s, en] = (e.target as HTMLSelectElement).value.split('-');
+  state.params = { ...state.params, startSide: s as 'left' | 'right', startEnd: en as 'near' | 'far' }; change();
+});
+$('zoomBlock').onclick = () => fitAoi();
+$('clearMission').onclick = () => {
+  if (!state.aoi) return;
+  state.aoi = null; state.demo = false; state.home = null; homeMarker.remove();
+  state.resume.on = false; state.selLine = 0; state.selSortie = 'all';
+  if (state.dem?.synthetic) { state.dem = null; state.demBuf = null; }
+  $('blockInfo').textContent = 'Mission cleared. Drop a block to start again.';
+  change(); updateDemInfo();
+};
 $('sensorSeg').addEventListener('click', e => {
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-sensor]');
   if (!b || b.dataset.sensor === state.survey.sensor) return;
@@ -837,6 +868,8 @@ function run() {
   state.result = r;
   updateButtons();
   $<HTMLButtonElement>('optCourse').disabled = !state.aoi;
+  $<HTMLButtonElement>('zoomBlock').disabled = !state.aoi;
+  $<HTMLButtonElement>('clearMission').disabled = !state.aoi;
   $<HTMLButtonElement>('fetchDem').disabled = !state.aoi;
   $('blockName').textContent = state.aoi ? state.aoi.name : 'No block loaded';
   $('homeInfo').textContent = !state.home ? 'Not set'
