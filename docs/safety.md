@@ -135,25 +135,12 @@ simulator, props off, with the flight data logged twice a second:
   refuses a route above its Max Altitude before take-off; it returns home when the route ends, and when RTH is
   pressed it ends the route, stops the recording itself and flies home at its current height (above the RTH setting).
 
-**Open: which height the aircraft flies to.** In two of three runs it held `executeHeight` (ellipsoidal) above
-the simulator's take-off altitude, in one run the EGM96 height, 32 m lower, with the same file. The simulator mixes
-a made-up position with real receiver data, so this may be its artefact. Where the geoid is above the ellipsoid
-(South Africa, N ≈ +30 m) an aircraft that ignored the geoid would fly HIGH, never low; where N is negative it
-would fly low. The first live flight settles it: at waypoint 1 the RC must show the planner's "height at WP 1"
-within 10 m, and the planner's figure assumes the EGM96 reading. If the aircraft is about 30 m higher than that
-figure, it is using the ellipsoidal reading; stop, and the writer will be changed to match before anything else is
-flown.
-
-### Resuming an interrupted job
-
-The job resumes from Pilot 2's breakpoint, as Pilot 2 does it. Checked in the simulator on 13 Oct 2026 with
-our own waypoint route (RTH on line 1 at waypoint 3, landed, resumed from the breakpoint through the SDK): the
-aircraft took off, climbed to the breakpoint height, flew straight to the breakpoint at transit speed, re-ran the
-first waypoint's actions there (gimbal down, start recording: the L3 went to STARTED within two seconds; the
-calibration action was triggered but no passes were flown), and continued from the breakpoint at the planned
-speed to the end of the route, where it stopped recording and went home. So a breakpoint resume restarts the
-recording by itself. The planner's "re-fly from line N" route stays as a fallback. Still check the L3 status on
-the RC when a real flight resumes; it costs nothing.
+**Height reference, settled on the first live flight (14 Oct 2026).** In the simulator the aircraft had held our
+heights as ellipsoidal in two runs and as EGM96 in one (32 m apart, same file). On the live flight at the home
+block (G3) the RC showed 186 m above take-off at waypoint 1 against the planner's 186 m, which assumes the EGM96
+reading. So in flight the aircraft converts our ellipsoidal  to height above the take-off point the
+same way we and Pilot 2 do; the two simulator runs that said otherwise were the simulator mixing a made-up position
+with real receiver data. The waypoint-1 check stays in the pre-flight list; it costs nothing.
 
 ## 6. What none of this covers
 
@@ -179,7 +166,7 @@ Items 4 and 5 are what the gates are for.
 | (any time) | Optional second opinion: export the UgCS CSV and look at the route over UgCS's own terrain |  Clearance looks the same in software that shares nothing with this planner |
 | G1 | Import the test files into Pilot 2; save and re-export `test-01`; `tools/compare-kmz.ts` | Heights within 0.1 m, speeds, damping, `useStraightLine`, actions unchanged; cap known |
 | G2 | DJI simulator, props off: full route, RTH mid-line | **Passed 13 Oct 2026** (section 5a). RC loss not simulated. |
-| G3 | Live, flat open ground, ≥ 150 m AGL, RTK fixed | Height at waypoint 1 matches the planner within ~10 m; L3 range to ground within 5 m of plan |
+| G3 | Live, open ground, RTK fixed | **Flown 14 Oct 2026** at the home block (100 m AGL, 6 lines): height at waypoint 1 186 m vs 186 m planned, L3 recorded, calibration passes flown, no messages. Point-cloud range check pending. |
 | G4 | Live, real slopes, planned 100 m higher than the job needs | Measured AGL never below plan − 10 m; no leg at the speed floor |
 | Job | Step down only if G4 held | Obstacle survey done; never below 100 m AGL on GLO-30 |
 

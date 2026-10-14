@@ -90,8 +90,9 @@ DEM clip (AOI + buffer), offline basemap tiles.
 - Corners between lines are DJI `coordinateTurn` (M400 simulator: 6–7 m/s through a 90° corner at 10 m/s, 4–6 m
   inside it; fly-through pivoted at ~3 m/s). Pilot 2 keeps the mode and its damping on import (test-01c round trip).
 - G2 passed 13 Oct 2026 in the simulator from our app (apps/rc/README.md, docs/safety.md §5a): within 2 m of
-  the file, limits held, L3 start/stop, RTH mid-route. Open: height reference (ellipsoidal vs EGM96 reading,
-  32 m) → the waypoint-1 check on the first live flight decides; upload of ~1,000 waypoints to the aircraft.
+  the file, limits held, L3 start/stop, RTH mid-route. Height reference settled on the first live flight (G3, 14 Oct 2026): 186 m at
+  waypoint 1 vs 186 m planned, so the aircraft reads our heights as EGM96/above take-off as we assume. Open: upload
+  of ~1,000 waypoints to the aircraft.
   (samples/generated/test-cap-*.kmz), actions in Pilot 2 waypoint UI, fly-through rounding with useStraightLine 1.
 - The route file carries neither RTH height nor Max Altitude: the planner shows both per sortie, tags the file
   name (`_RTH330_ALT430`) and makes the pilot confirm them at export.
