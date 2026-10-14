@@ -87,6 +87,7 @@ const state = {
   demBuf: null as ArrayBuffer | null,
   view: null as View | null,
   pickingHome: false,
+  drawing: false, drawPts: [] as LonLat[], editing: false,
   result: null as Result | null,
   planError: null as string | null,
 };
@@ -187,7 +188,8 @@ app.innerHTML = `
     <h2>Block</h2>
     <label class="drop"><input type="file" id="fileBlock" accept=".kmz,.kml" hidden />
       <strong>Drop KMZ / KML</strong><span>or click to choose. Largest polygon is used.</span></label>
-    <div class="row"><button id="zoomBlock" class="ghost" disabled>Zoom to block</button><button id="clearMission" class="ghost" disabled>Clear mission</button><button id="loadDemo" class="link">Demo block</button></div>
+    <div class="row"><button id="drawBlock" class="ghost" title="Draw the block on the map: click each corner, double-click or Enter to finish, Esc to cancel">Draw block</button><button id="editBlock" class="ghost" disabled title="Drag the corners of the block">Edit corners</button><button id="zoomBlock" class="ghost" disabled>Zoom to block</button></div>
+    <div class="row"><button id="clearMission" class="ghost" disabled>Clear mission</button><button id="loadDemo" class="link">Demo block</button></div>
     <div class="note" id="blockInfo"></div>
   </section>
   <section>
@@ -297,6 +299,7 @@ app.innerHTML = `
     <div class="layers-panel" id="layersPanel" hidden>${LAYERS.map(([id, label]) => `<label class="check"><input type="checkbox" data-layer="${id}" /> ${label}</label>`).join('')}</div>
   </div>
   <div class="pick-hint" id="pickHint" hidden>Click the map to set home · Esc to cancel</div>
+  <div class="pick-hint" id="drawHint" hidden>Click each corner of the block · double-click or Enter to finish · Esc to cancel</div>
   <section class="bottom">
     <div class="stats" id="stats"></div>
     <div class="profile-wrap">
@@ -464,6 +467,7 @@ $('startCorner').addEventListener('change', e => {
 $('zoomBlock').onclick = () => fitAoi();
 $('clearMission').onclick = () => {
   if (!state.aoi) return;
+  stopEditing();
   state.aoi = null; state.demo = false; state.home = null; homeMarker.remove();
   state.resume.on = false; state.selLine = 0; state.selSortie = 'all';
   if (state.dem?.synthetic) { state.dem = null; state.demBuf = null; }
@@ -572,8 +576,12 @@ function onStyleReady() {   // style ready: add our layers without waiting for e
       'circle-stroke-color': ['case', ['get', 'flag'], css('--c-err'), '#1c1c1c'], 'circle-stroke-width': ['case', ['get', 'flag'], 2.5, 1] } });
   map.addLayer({ id: 'rec', type: 'circle', source: 'rec',
     paint: { 'circle-radius': 7, 'circle-color': ['case', ['get', 'start'], css('--c-line'), css('--c-appr')], 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
+  map.addSource('draw', { type: 'geojson', data: empty });
+  map.addLayer({ id: 'draw-fill', type: 'fill', source: 'draw', filter: ['==', '$type', 'Polygon'], paint: { 'fill-color': css('--c-aoi'), 'fill-opacity': 0.12 } });
+  map.addLayer({ id: 'draw-line', type: 'line', source: 'draw', filter: ['==', '$type', 'LineString'], paint: { 'line-color': css('--c-aoi'), 'line-width': 2, 'line-dasharray': [2, 1.5] } });
+  map.addLayer({ id: 'draw-pts', type: 'circle', source: 'draw', filter: ['==', '$type', 'Point'], paint: { 'circle-radius': 5, 'circle-color': css('--c-aoi'), 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } });
   map.on('click', 'route-hit', e => {
-    if (state.pickingHome) return;
+    if (state.pickingHome || state.drawing) return;
     const line = e.features?.[0]?.properties?.line;
     if (line != null && line !== '') selectLine(Number(line));
   });
@@ -620,6 +628,72 @@ function setPicking(on: boolean) {
 }
 $('setHome').onclick = () => setPicking(!state.pickingHome);
 map.on('click', e => { if (state.pickingHome) { setPicking(false); setHome([e.lngLat.lng, e.lngLat.lat]); } });
+
+// ── Drawing a block on the map, and dragging its corners ──────────
+function renderDraw(cursor?: LonLat) {
+  const pts = state.drawPts, s = src('draw'); if (!s) return;
+  const f: GeoJSON.Feature[] = pts.map(p => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: p } }));
+  const ring = cursor ? [...pts, cursor] : pts;
+  if (ring.length >= 2) f.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: ring } });
+  if (ring.length >= 3) f.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[...ring, ring[0]]] } });
+  s.setData({ type: 'FeatureCollection', features: f });
+}
+function setDrawing(on: boolean) {
+  if (on && state.pickingHome) setPicking(false);
+  if (on) stopEditing();
+  state.drawing = on; state.drawPts = [];
+  $('drawHint').hidden = !on;
+  $('drawBlock').textContent = on ? 'Cancel drawing' : 'Draw block';
+  map.getCanvas().style.cursor = on ? 'crosshair' : '';
+  if (on) map.doubleClickZoom.disable(); else map.doubleClickZoom.enable();
+  renderDraw();
+}
+function finishDrawing() {
+  const pts = state.drawPts.slice();
+  setDrawing(false);
+  if (pts.length < 3) { $('blockInfo').textContent = 'A block needs at least 3 corners.'; return; }
+  setAoi({ name: `Drawn block (${pts.length} corners)`, poly: pts, polygonsFound: 1 });
+}
+$('drawBlock').onclick = () => setDrawing(!state.drawing);
+map.on('click', e => {
+  if (!state.drawing) return;
+  state.drawPts.push([e.lngLat.lng, e.lngLat.lat]); renderDraw();
+});
+map.on('dblclick', e => { if (state.drawing) { e.preventDefault(); finishDrawing(); } });
+map.on('mousemove', e => { if (state.drawing && state.drawPts.length) renderDraw([e.lngLat.lng, e.lngLat.lat]); });
+document.addEventListener('keydown', e => {
+  if (!state.drawing) return;
+  if (e.key === 'Enter') { e.preventDefault(); finishDrawing(); }
+  if (e.key === 'Escape') setDrawing(false);
+  if (e.key === 'Backspace' && !(e.target instanceof HTMLInputElement)) { state.drawPts.pop(); renderDraw(); }
+});
+
+let cornerMarkers: maplibregl.Marker[] = [];
+function stopEditing() {
+  for (const m of cornerMarkers) m.remove();
+  cornerMarkers = []; state.editing = false;
+  $('editBlock').textContent = 'Edit corners';
+}
+function startEditing() {
+  if (!state.aoi) return;
+  if (state.drawing) setDrawing(false);
+  stopEditing(); state.editing = true;
+  $('editBlock').textContent = 'Done editing';
+  state.aoi.poly.forEach((p, i) => {
+    const el = document.createElement('div'); el.className = 'corner';
+    const m = new maplibregl.Marker({ element: el, draggable: true }).setLngLat(p).addTo(map);
+    m.on('dragend', () => {
+      if (!state.aoi) return;
+      const ll = m.getLngLat();
+      const poly = state.aoi.poly.map((q, j) => (j === i ? [ll.lng, ll.lat] as LonLat : q));
+      state.aoi = { ...state.aoi, poly, name: state.aoi.name.replace(/ \(edited\)$/, '') + ' (edited)' };
+      state.demo = false;
+      persist(); schedule();
+    });
+    cornerMarkers.push(m);
+  });
+}
+$('editBlock').onclick = () => (state.editing ? stopEditing() : startEditing());
 window.addEventListener('keydown', e => { if (e.key === 'Escape') { setPicking(false); $('layersPanel').hidden = true; } });
 
 // ── View: 2D/3D + layers ─────────────────────────────────────────
@@ -869,6 +943,7 @@ function run() {
   updateButtons();
   $<HTMLButtonElement>('optCourse').disabled = !state.aoi;
   $<HTMLButtonElement>('zoomBlock').disabled = !state.aoi;
+  $<HTMLButtonElement>('editBlock').disabled = !state.aoi;
   $<HTMLButtonElement>('clearMission').disabled = !state.aoi;
   $<HTMLButtonElement>('fetchDem').disabled = !state.aoi;
   $('blockName').textContent = state.aoi ? state.aoi.name : 'No block loaded';
@@ -1163,6 +1238,7 @@ $('stats').addEventListener('click', e => {
 
 // ── Block input ──────────────────────────────────────────────────
 function setAoi(aoi: Aoi, demo = false) {
+  stopEditing();
   const wasDemo = state.demo || !!state.dem?.synthetic;
   state.aoi = aoi; state.demo = demo; state.selLine = 0; state.selSortie = 'all';
   // A new block needs its own home point: the old one belongs to another site.
