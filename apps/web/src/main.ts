@@ -148,6 +148,8 @@ const UNC_MAX = 200, RTH_MIN = 20, RTH_MAX = SAFETY.maxAboveHomeM;
   if (s.demDatum !== 'orthometric' && s.demDatum !== 'ellipsoidal') s.demDatum = 'orthometric';
   s.transitInRoute = s.transitInRoute === true;
   if (!profiles().some(p => p.id === s.profile)) s.profile = 'l3';
+  // The figure-8 left the planner on 14 Oct 2026: a browser that saved it switched on must not keep flying it.
+  s.fig8 = false; s.fig8End = false;
   if (!inRange(s.sortieMin, 5, 50)) s.sortieMin = M400_LIMITS.sortieMinDefault;
   if (!inRange(s.sortieOverlap, 0, 2)) s.sortieOverlap = 0;
   if (s.maxWp != null && !inRange(s.maxWp, 50, 65535)) s.maxWp = null;
