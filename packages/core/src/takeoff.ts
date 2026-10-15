@@ -26,7 +26,7 @@ export interface TakeoffOptions {
 
 export const TAKEOFF_DEFAULTS: TakeoffOptions = {
   takeoffSecurityM: 60,
-  flyToMode: 'safely',
+  flyToMode: 'pointToPoint',   // climb to the security height, then one sloped leg to waypoint 1 (checked for clearance); 'safely' climbed vertically to route height first and cost ~50 s on 15 Oct 2026
   transitSpeedMs: 15,
   rthHeightM: null,
   minClearanceM: 60,
