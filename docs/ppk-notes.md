@@ -93,6 +93,13 @@ already is the phase-centre reference the aircraft used). Then reprocess. Our ow
 and agreed with the aircraft's RTK to 2–5 cm, so the same should follow in Terra. The same base coordinates must be
 used for the RS4 rover survey (they were: the rover worked against the base's broadcast position).
 
+No reprocessing is needed to repair a cloud that was processed with the wrong base: the error is a rigid translation
+by the base error, so `node tools/las-shift.ts in.las out.las --east … --north … --up …` (header offsets only, exact,
+seconds) puts it right. Done for both: PT cloud0 shifted by (+0.327, −0.143, −0.847) → **+2.7 cm** lowest / +7.4 cm
+median above the points; G4 cloud0 (Terra's base there was 1.36 m south and 0.96 m up of the true point) shifted by
+(+0.039, +1.360, −0.958) → **+5.6 cm** / +10.9 cm. Same as the RTK cloud. For a job, type the base position into Terra
+once and nothing needs shifting.
+
 ## To do
 
 - [ ] Field rule: fly RTK when corrections exist, log the RS4 always; PPK the photos as standard, point cloud via Terra PPK.
