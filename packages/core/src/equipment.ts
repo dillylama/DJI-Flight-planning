@@ -20,8 +20,8 @@ export const M400_SPEC = {
 export const M400_LIMITS = {
   lineSpeedWarnMs: 15, lineSpeedMaxMs: 20,        // 60 % / 80 % of 25 m/s
   transitSpeedWarnMs: 15,
-  climbWarnMs: 4, climbMaxMs: 6,                   // 40 % / 60 % of 10 m/s
-  descentWarnMs: 3, descentMaxMs: 5,               // ~40 % / ~60 % of 8 m/s
+  climbWarnMs: 3.5, climbMaxMs: 6,                 // wayline limit measured 3.5 m/s (sliders do not apply); 60 % of 10 m/s
+  descentWarnMs: 2.5, descentMaxMs: 5,             // wayline limit measured 2.5 m/s; ~60 % of 8 m/s
   bankWarnDeg: 25, bankMaxDeg: 30,                 // max pitch 35°
   windNoteMs: 12,
   sortieMinDefault: 30,                            // usable minutes per battery set with L3 (no official figure)

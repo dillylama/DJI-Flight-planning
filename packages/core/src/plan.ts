@@ -50,8 +50,8 @@ export const DEFAULTS: PlanOptions = {
   corridorM: 75,
   demSampleM: 30,
   verticalMode: 'slow',
-  climbMs: 4,
-  descentMs: 3,
+  climbMs: 3.5,            // the M400's own wayline limits, measured 14–15 Oct 2026 (G4, G5, G6; the Pilot 2 ascent/descent sliders do not apply to waylines)
+  descentMs: 2.5,
   minLegSpeedMs: 1,
   maxGradient: 0.15,
   roundingMaxM: 5,

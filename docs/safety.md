@@ -70,7 +70,12 @@ Real-Time Follow for that.
 ## 3. Speed on steep ground
 
 `waypointSpeed` is the speed from that waypoint to the next (DJI WPML). In the default "follow
-terrain" profile each leg has a top speed from the climb / descent limits (4 / 3 m/s). A waypoint's
+terrain" profile each leg has a top speed from the climb / descent limits (3.5 / 2.5 m/s since 15 Oct 2026, the
+M400's own wayline limits as measured on G4, G5 and G6; 4 / 3 before). The Pilot 2 "Max Ascent / Descent Speed"
+sliders do not apply to waylines: G6 was flown with them at 8 / 6 and the steep legs still ran at 3.2 up / 2.3
+down, the same as the flights at 5 / 4. There is no field for the wayline vertical limit in the route file; the
+planner's figures only decide what horizontal speed it writes on a steep leg and how long it says the flight
+takes. A waypoint's
 speed is capped by its own leg's limit, and by what can brake to the next leg's entry speed within the
 leg at 2 m/s². A leg that would need less than 1 m/s is an error (`TOO_STEEP`).
 
