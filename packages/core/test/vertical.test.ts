@@ -78,7 +78,7 @@ test('turn rounding stays inside the terrain corridor; rounding and pull-up lag 
   const hills = (lon: number, lat: number) => { const x = (lon - lon0) / m * k, y = (lat - lat0) / m; return 300 + 150 * Math.sin(x / 200) * Math.cos(y / 260); };
   for (const corridorM of [30, 75]) {
     // long turn damping (as before Pilot 2's 10 m cap was adopted), so that the corridor is what limits it
-    const plan = planLines(poly, { aglM: 150, speedMs: 17, corridorM, dampingFrac: 0.4, dampingMaxM: 60 });
+    const plan = planLines(poly, { aglM: 150, speedMs: 17, corridorM, dampingFrac: 0.4, dampingMaxM: 60, runInM: 150, runOutM: 150 });
     const f = applyHeights(plan, buildRoute(plan), hills);
     const n = f.wps.length;
     assert.ok(f.wps.every(w => w.turnM <= 0.9 * corridorM + 1e-9), `corridor ${corridorM}: turn rounding within 90 % of the corridor`);
@@ -94,10 +94,10 @@ test('turn rounding stays inside the terrain corridor; rounding and pull-up lag 
     assert.ok(Math.abs(level[turnWp].turnM - level[turnWp].dampingM) < 1e-6, 'a 90° turn can swing its whole damping distance');
   }
   // level ground: nothing to round vertically and nothing to lag behind
-  const plan = planLines(poly, { aglM: 150 });
+  const plan = planLines(poly, { aglM: 150, runInM: 150, runOutM: 150 });
   const flat = applyHeights(plan, buildRoute(plan), () => 100);
   // straight runs: 10 m, just enough to fly through; corners: the turn radius at 20° bank for the speed flown
-  // in (17 m/s → 81 m), held to a third of the shorter leg and the 60 m cap
+  // in (17 m/s → 81 m), held to a third of the shorter leg (the cross leg here, with 150 m run-ins) and the 60 m cap
   assert.ok(flat.wps.filter(w => w.role === 'line').every(w => Math.abs(w.dampingM - 10) < 1e-9));
   const corner = flat.wps.findIndex((w, i) => w.role === 'runout' && flat.wps[i + 1]?.role === 'runin');
   assert.ok(Math.abs(flat.wps[corner].dampingM - Math.min(60, plan.spacing / 3, 17 * 17 / (9.81 * Math.tan(20 * Math.PI / 180)))) < 1e-6, `corner damping ${flat.wps[corner].dampingM}`);

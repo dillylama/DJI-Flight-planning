@@ -23,7 +23,9 @@ DEM clip (AOI + buffer), offline basemap tiles.
 
 ## Route engine behaviour (carry over into core)
 - Lines from block polygon + AGL, speed, sidelap, course; spacing from L3 swath. Serpentine.
-- ~150 m run-in / run-out on every line.
+- Run-in / run-out 80 m by default (was 150 in the figure-8 era; must exceed the coordinated-turn radius, 81 m at
+  17 m/s). Without a figure-8 the approach waypoint sits only max(20 m, 2 s) before the run-in (15 Oct 2026: it used
+  to sit a radius plus an alignment straight before it, up to 400 m beyond the block).
 - Waypoints every ~150 m, **absolute heights** from the DEM: each waypoint ≥ the highest DEM cell touching the
   corridor of both adjacent legs (±75 m, extended beyond the leg ends, sampled finer than the DEM with the
   highest of the 4 cells around each sample) + AGL. A DEM gap anywhere is an error (`TerrainGapError`).

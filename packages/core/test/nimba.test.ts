@@ -18,7 +18,7 @@ const elev = (lon: number, lat: number) => {
 // never plan LOWER than the original did.
 const legacy = createRequire(import.meta.url)('../../../route-engine.js');
 // Settings that reproduce the original layout: gradient-limited heights, 2.5 r approach, no end figure-8.
-const legacyLike: Partial<PlanOptions> = { courseDeg: 20, verticalMode: 'raise', alignStraightS: 0, fig8MinRadiusM: 0 };
+const legacyLike: Partial<PlanOptions> = { courseDeg: 20, verticalMode: 'raise', alignStraightS: 0, fig8MinRadiusM: 0, runInM: 150, runOutM: 150 };
 
 function runTs(opts: { fromLine?: number; speedMs?: number } = {}) {
   const plan = planLines(poly, legacyLike, 'sphere');

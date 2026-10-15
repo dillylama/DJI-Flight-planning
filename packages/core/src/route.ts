@@ -93,7 +93,11 @@ export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true, fig
   const hdg0 = mul(d, first.dir);
   const runInStart = toXY(first.dir > 0 ? first.umin - runIn : first.umax + runIn, first.v);
   const X0 = add(runInStart, mul(hdg0, -r));
-  const approachXY = add(X0, mul(hdg0, -straight));
+  // With a figure-8 the approach sits a straight run and one radius before the run-in. Without one (the L3 with
+  // DJI's own calibration, the default since 14 Oct 2026) only a short lead-in is needed for the recording to start
+  // before the run-in: the run-in itself is the settling distance. Until 15 Oct the long version was used in both
+  // cases, which put the first waypoint up to 400 m beyond the block.
+  const approachXY = fig8 ? add(X0, mul(hdg0, -straight)) : add(runInStart, mul(hdg0, -Math.max(20, 2 * v)));
   if (transit) ferry(transit.home, approachXY, true);
   push(approachXY, 'approach', { actions: ['START_RECORD'], stop: !!transit });   // recording running before the 8
   if (fig8) eight(X0, hdg0);
