@@ -151,6 +151,10 @@ RTH is unchanged: a straight line at the RTH height, checked from every point of
 - The demo block uses made-up terrain: nothing can be exported from it, and it is dropped as soon as
   any other block is loaded.
 - Projected (UTM) and rotated GeoTIFFs are refused.
+- Measured against FlightHub 2 (15 Oct 2026, open site with koppies, both at 320 m AGL): the planner's flown track
+  never came below 319.8 m above the lowest LiDAR return within ±75 m of the line; FH2 with its built-in "global
+  elevation data" came down to 271 m directly under the line and 248 m over ground 75 m beside it (its own cloud and
+  GLO-30 agree). A planned AGL in FH2 is not a clearance over hills; here it is, within the stated allowances.
 
 ## 5a. What the simulator showed (13 Oct 2026, gate G2)
 

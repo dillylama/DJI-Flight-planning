@@ -199,5 +199,10 @@ DEM clip (AOI + buffer), offline basemap tiles.
   steps vs FH2's under-the-line follow), ~40 s = planner ended at the far corner. FH2 stopped fully twice per turn
   (3-4 s each) and slowed < 4 m/s 20 times at height changes; the planner never stopped at a turn but crawled 19 s at
   1.9 m/s on its steepest step. Lines at 14.2 vs 15.0 m/s. Waypoints 99 vs 203 made no speed difference.
+  Clouds (samples/fh2test/FH2-vs-planner-clouds.txt): block density 20 vs 19 pts/m² median; the planner's outer 20 m
+  ring 14 % empty (swath edge on the block edge) vs FH2 3 % (20 m margin). Real clearance on the lines from the flown
+  track vs each flight's own cloud: planner never below 320 m (lowest 319.8 within ±75 m); FH2 flew 42–50 m LOW under
+  the line at the koppies (lowest 271 m) and 70 m low over ground 75 m beside it (248 m), confirmed against GLO-30.
+  FH2's "global elevation data" under-reads the hills; that is where its time advantage came from.
 - RC-lost behaviour is a take-off option (`rcLost`: goBack = DJI RC-lost action, continue = WPML exitOnRCLost goContinue),
   planner "If the RC link is lost" in Home & aircraft. Luke plans for link loss at some landing zones (15 Oct 2026).
