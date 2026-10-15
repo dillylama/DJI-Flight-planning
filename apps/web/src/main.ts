@@ -9,6 +9,8 @@ import {
   bufferedBbox, openTopoUrl, planTransit, coverage, checkLimits, planSorties, writeWpml, writeKmz,
   cameraFovDeg, gsdCm, aglForGsd, photoPlan, lidarDensity,
   safetyChecks, clearanceBudget, verifyRouteFiles, toUgcsCsv,
+  readMissionFiles, checkClearance, liftRoute, liftedRoute, wpmlOptionsFor, dsmFromRaster, writeGeoTiff,
+  type MissionFile, type CheckReport, type CheckWp, type Raster,
   type PlanOptions, type Plan, type Route, type FlightWp, type RouteStats, type Issue, type ElevFn, type Bbox,
   type LonLat, type TakeoffOptions, type Transit, type Coverage, type Pt3, type Camera, type PhotoPlan, type SortiePlan,
   type ClearanceBudget, type VerifyReport, type WpmlFiles, type VerticalDatum,
@@ -23,7 +25,9 @@ import { publish, newPairingCode, listDevices, type ApiCfg } from './sync.ts';
 
 // ── State ─────────────────────────────────────────────────────────
 // `synthetic` terrain is the demo's made-up ridge: fine for a preview, never for a route that is exported.
-interface Dem { name: string; elev: ElevFn; bbox?: Bbox; synthetic: boolean; source: 'demo' | 'glo30' | 'file'; datum: VerticalDatum; gaps: number }
+interface Dem { name: string; elev: ElevFn; bbox?: Bbox; synthetic: boolean; source: 'demo' | 'glo30' | 'file'; datum: VerticalDatum; gaps: number; raster?: Raster }
+// A mission file (Pilot 2, FlightHub 2 or ours) being checked against the terrain (core/check.ts).
+interface CheckState { name: string; mission: MissionFile; report: CheckReport | null; lifted: CheckWp[] | null; liftedReport: CheckReport | null; error: string | null }
 // An issue that belongs to one sortie's route (its waypoint numbers refer to that route).
 type PlanIssue = Issue & { sortie?: number };
 // One route file as it will be flown: built once, checked by the independent verifier, exported byte for byte.
@@ -90,6 +94,7 @@ const state = {
   drawing: false, drawPts: [] as LonLat[], editing: false,
   result: null as Result | null,
   planError: null as string | null,
+  check: null as CheckState | null,
 };
 const persist = () => {
   const { aoi, params, demo, home, takeoff, view3d, survey, layers } = state;
@@ -289,6 +294,20 @@ app.innerHTML = `
       <label><span class="lt">New speed <em>m/s</em>${ti('resSpeed')}</span><input type="number" id="resSpeed" step="0.5" min="1" max="20" value="14" /></label>
     </div>
     <div class="note">For a new landing zone, or when Pilot 2's own breakpoint cannot be used. Set the new home first.</div>
+  </section>
+  <section>
+    <h2>Check a mission file ${ti('check')}</h2>
+    <label class="drop small"><input type="file" id="fileCheck" accept=".kmz" hidden />
+      <span>Drop a Pilot 2 / FlightHub 2 / planner KMZ to measure it against the terrain</span></label>
+    <div class="fields" style="margin-top:8px">
+      <label><span class="lt">Planned AGL <em>m</em>${ti('chkAgl')}</span><input type="number" id="chkAgl" step="10" min="30" max="1500" /></label>
+      <label><span class="lt">Corridor <em>± m</em>${ti('chkCorr')}</span><input type="number" id="chkCorr" step="5" min="0" max="300" /></label>
+    </div>
+    <div class="note" id="chkInfo">No mission file loaded.</div>
+    <div class="issues" id="chkLegs"></div>
+    <div class="row"><button id="chkLift" class="ghost" disabled${btnTip('chkLift')}>Export corrected KMZ</button><button id="chkClear" class="link" hidden>Clear</button></div>
+    <div class="row" style="margin-top:8px"><select id="dsmDilate" title="How the DEM is turned into the surface DJI follows"><option value="75">DSM: highest ground within 75 m</option><option value="30">DSM: highest ground within 30 m</option><option value="0">DSM: bare DEM</option></select>
+      <button id="dsmBtn" class="ghost" disabled${btnTip('dsmBtn')}>Export DSM for Pilot 2</button></div>
   </section>
   <section>
     <details class="adv"><summary>Sync to RC (not in use) ${ti('sync')}</summary>
@@ -633,6 +652,12 @@ function onStyleReady() {   // style ready: add our layers without waiting for e
   map.addLayer({ id: 'draw-fill', type: 'fill', source: 'draw', filter: ['==', '$type', 'Polygon'], paint: { 'fill-color': css('--c-aoi'), 'fill-opacity': 0.12 } });
   map.addLayer({ id: 'draw-line', type: 'line', source: 'draw', filter: ['==', '$type', 'LineString'], paint: { 'line-color': css('--c-aoi'), 'line-width': 2, 'line-dasharray': [2, 1.5] } });
   map.addLayer({ id: 'draw-pts', type: 'circle', source: 'draw', filter: ['==', '$type', 'Point'], paint: { 'circle-radius': 5, 'circle-color': css('--c-aoi'), 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } });
+  // A checked mission file: legs green where they hold the planned clearance, red where short; the corrected route in blue.
+  map.addSource('check', { type: 'geojson', data: empty });
+  map.addLayer({ id: 'check-line', type: 'line', source: 'check', filter: ['==', '$type', 'LineString'], layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': ['case', ['get', 'lifted'], css('--c-transit'), ['>', ['get', 'short'], 0], css('--c-err'), css('--c-ok')], 'line-width': ['case', ['get', 'lifted'], 2.5, 3.5] } });
+  map.addLayer({ id: 'check-wps', type: 'circle', source: 'check', filter: ['==', '$type', 'Point'], minzoom: 12,
+    paint: { 'circle-radius': 3, 'circle-color': ['case', ['get', 'lifted'], css('--c-transit'), '#fff'], 'circle-stroke-color': '#1c1c1c', 'circle-stroke-width': 1 } });
   map.on('click', 'route-hit', e => {
     if (state.pickingHome || state.drawing) return;
     const line = e.features?.[0]?.properties?.line;
@@ -1008,6 +1033,8 @@ function run() {
   $<HTMLButtonElement>('clearMission').disabled = !state.aoi;
   $<HTMLButtonElement>('fetchDem').disabled = !state.aoi;
   $('blockName').textContent = state.aoi ? state.aoi.name : 'No block loaded';
+  // a checked mission file whose heights are relative to the take-off point follows the home position
+  { const hk = state.home ? state.home.join(',') : ''; if (checkFile && hk !== lastHomeKey) { lastHomeKey = hk; runCheck(); } else lastHomeKey = hk; }
   $('homeInfo').textContent = !state.home ? 'Not set'
     : `${state.home[1].toFixed(5)}, ${state.home[0].toFixed(5)}${r?.transit ? ` · ground ${r.transit.homeElev.toFixed(0)} m` : ''}`;
   renderView();
@@ -1223,6 +1250,7 @@ function selectLine(i: number | 'transit') { state.selLine = i; renderMap(state.
 function renderProf() {
   const svg = $('profile') as unknown as SVGSVGElement;
   const info = $('profInfo');
+  if (state.check?.report) { renderCheckProfile(svg, info); return; }
   const r = state.view;
   if (!r?.flight || !state.dem) {
     svg.replaceChildren();
@@ -1350,9 +1378,10 @@ function updateDemInfo(msg?: string, err = false) {
 type DemSource = 'glo30' | 'file';
 async function useDemBuffer(buf: ArrayBuffer, name: string, source: DemSource, datum: VerticalDatum, save = true) {
   const raster = await readGeoTiff(buf, { verticalDatum: datum });
-  state.dem = { name: `${name} (${raster.width}×${raster.height})`, elev: rasterElev(raster), bbox: rasterBbox(raster), synthetic: false, source, datum, gaps: rasterGaps(raster) };
+  state.dem = { name: `${name} (${raster.width}×${raster.height})`, elev: rasterElev(raster), bbox: rasterBbox(raster), synthetic: false, raster, source, datum, gaps: rasterGaps(raster) };
   state.demBuf = buf;
   state.demo = false; persist(); updateDemInfo(); schedule();
+  runCheck();
   if (save) await putBlob('dem', { name, buf, source, datum });
 }
 // The DEM kept from the last session (not for the demo block, which has its own made-up terrain).
@@ -1413,10 +1442,153 @@ for (const t of ['dragenter', 'dragover'] as const) window.addEventListener(t, e
 for (const t of ['dragleave', 'drop'] as const) window.addEventListener(t, e => { e.preventDefault(); if (t === 'drop' || !(e as DragEvent).relatedTarget) document.body.classList.remove('dragging'); });
 window.addEventListener('drop', e => {
   for (const f of Array.from(e.dataTransfer?.files ?? [])) {
-    if (/\.(kmz|kml)$/i.test(f.name)) onBlockFile(f);
+    if (/\.(kmz|kml)$/i.test(f.name)) routeOrBlock(f);
     else if (/\.tiff?$/i.test(f.name)) onDemFile(f);
   }
 });
+
+// ── Check a mission file (any DJI KMZ against the terrain; core/check.ts) ─────
+// A dropped KMZ with a wpmz/waylines.wpml inside is a mission to check; anything else is a block polygon.
+async function routeOrBlock(f: File) {
+  try {
+    const zip = await JSZip.loadAsync(await f.arrayBuffer());
+    if (Object.keys(zip.files).some(n => /waylines\.wpml$/.test(n))) return onCheckFile(f);
+  } catch { /* not a zip: fall through to the block reader */ }
+  onBlockFile(f);
+}
+const chkAgl = $<HTMLInputElement>('chkAgl'), chkCorr = $<HTMLInputElement>('chkCorr');
+chkAgl.value = String(P('aglM')); chkCorr.value = String(P('corridorM'));
+const chkA = () => Math.max(30, Number(chkAgl.value) || P('aglM')), chkC = () => Math.max(0, Number(chkCorr.value) || 0);
+let checkFile: { name: string; waylines: string; template: string | null } | null = null;
+let lastHomeKey = '';
+async function onCheckFile(f: File) {
+  try {
+    const zip = await JSZip.loadAsync(await f.arrayBuffer());
+    const get = async (re: RegExp) => { const n = Object.keys(zip.files).find(x => re.test(x)); return n ? zip.files[n].async('string') : null; };
+    const waylines = await get(/waylines\.wpml$/);
+    if (!waylines) throw new Error('No wpmz/waylines.wpml in this KMZ.');
+    checkFile = { name: f.name.replace(/\.kmz$/i, ''), waylines, template: await get(/template\.kml$/) };
+    // a mapping mission's template carries the AGL it was planned with; a waypoint template's "height" is absolute
+    try {
+      const probe = readMissionFiles(waylines, checkFile.template, 0);
+      if (probe.templateType && probe.templateType !== 'waypoint' && probe.flightHeightM != null && probe.flightHeightM >= 30 && probe.flightHeightM <= 1500) chkAgl.value = String(probe.flightHeightM);
+    } catch { /* needs the take-off point; handled in runCheck */ }
+    $('chkClear').hidden = false;
+    runCheck();
+  } catch (e) { state.check = null; $('chkInfo').textContent = (e as Error).message; $('chkLegs').innerHTML = ''; renderCheckMap(); }
+}
+function runCheck() {
+  $<HTMLButtonElement>('dsmBtn').disabled = !state.dem?.raster;
+  if (!checkFile) return;
+  const info = $('chkInfo'), legs = $('chkLegs');
+  $<HTMLButtonElement>('chkLift').disabled = true;
+  try {
+    const dem = state.dem;
+    const home = state.home && dem ? dem.elev(state.home[0], state.home[1]) : null;
+    const mission = readMissionFiles(checkFile.waylines, checkFile.template, home ?? null);
+    state.check = { name: checkFile.name, mission, report: null, lifted: null, liftedReport: null, error: null };
+    if (!dem || dem.synthetic) { info.textContent = `${checkFile.name}: ${mission.wps.length} waypoints read. Load terrain (Fetch GLO-30 or drop a GeoTIFF) to measure it.`; legs.innerHTML = ''; renderCheckMap(); renderProf(); return; }
+    if (mission.wps.some(w => dem.elev(w.lon, w.lat) == null)) { info.textContent = `${checkFile.name}: the loaded DEM does not cover this route. Load a block around it and fetch GLO-30, or drop a wider GeoTIFF.`; legs.innerHTML = ''; renderCheckMap(); renderProf(); return; }
+    const report = checkClearance(mission.wps, dem.elev, { aglM: chkA(), corridorM: chkC(), marginM: 10 });
+    state.check.report = report;
+    const n = mission.notes.length ? ' ' + mission.notes.join(' ') : '';
+    info.innerHTML = `<b>${esc(checkFile.name)}</b>: ${mission.wps.length} waypoints, ${(report.lengthM / 1000).toFixed(2)} km, heights ${esc(mission.heightMode)}${mission.templateType ? `, ${esc(mission.templateType)} template` : ''}.${esc(n)}<br>`
+      + `Planned ${report.aglM} m: lowest clearance <b>${fmt(report.minUnderM)} m</b> over the ground under the line, <b>${fmt(report.minClearM)} m</b> over the ±${report.corridorM} m corridor. `
+      + (report.nShort ? `<span style="color:var(--c-err)">${report.nShort} of ${report.legs.length} legs are more than ${report.marginM} m short (${(report.shortLengthM / 1000).toFixed(2)} km).</span>` : `<span style="color:var(--c-ok)">Every leg holds the planned clearance within ${report.marginM} m.</span>`);
+    const bad = report.legs.filter(l => l.shortM > 0).sort((a, b) => b.shortM - a.shortM);
+    legs.innerHTML = bad.slice(0, 12).map(l => `<div class="issue error"><b>short</b><span>Leg ${l.leg + 1} (WP ${l.leg + 1}→${l.leg + 2}, ${fmt(l.lengthM)} m): ${fmt(l.minUnderM)} m over the ground under the line, ${fmt(l.minClearM)} m over the corridor → ${fmt(l.shortM)} m short</span></div>`).join('')
+      + (bad.length > 12 ? `<div class="issue info"><b>…</b><span>${bad.length - 12} more short legs</span></div>` : '');
+    $<HTMLButtonElement>('chkLift').disabled = false;
+  } catch (e) {
+    const msg = (e as Error).message;
+    state.check = null;
+    info.textContent = /take-off point/.test(msg) ? msg + ' (Set home on the map at the take-off position: the DEM ground there is then used.)' : msg;
+    legs.innerHTML = '';
+  }
+  renderCheckMap(); renderProf();
+}
+function renderCheckMap() {
+  const c = state.check, s = src('check');
+  if (!s) return;
+  if (!c) { s.setData(empty); return; }
+  const feats: GeoJSON.Feature[] = [];
+  const legShort = new Map<number, number>((c.report?.legs ?? []).map(l => [l.leg, l.shortM]));
+  for (let i = 0; i < c.mission.wps.length - 1; i++) {
+    const a = c.mission.wps[i], b = c.mission.wps[i + 1];
+    feats.push({ type: 'Feature', properties: { short: legShort.get(i) ?? 0, lifted: false }, geometry: { type: 'LineString', coordinates: [[a.lon, a.lat], [b.lon, b.lat]] } });
+  }
+  for (const w of c.mission.wps) feats.push({ type: 'Feature', properties: { lifted: false }, geometry: { type: 'Point', coordinates: [w.lon, w.lat] } });
+  if (c.lifted) {
+    feats.push({ type: 'Feature', properties: { short: 0, lifted: true }, geometry: { type: 'LineString', coordinates: c.lifted.map(w => [w.lon, w.lat]) } });
+    for (const w of c.lifted) if (w.inserted) feats.push({ type: 'Feature', properties: { lifted: true }, geometry: { type: 'Point', coordinates: [w.lon, w.lat] } });
+  }
+  s.setData({ type: 'FeatureCollection', features: feats });
+  if (!c.report && c.mission.wps.length) {   // first look: bring the file into view
+    const lons = c.mission.wps.map(w => w.lon), lats = c.mission.wps.map(w => w.lat);
+    map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]] as LngLatBoundsLike, { padding: 60, duration: 600 });
+  }
+}
+// Profile of the checked file: ground under the line, highest ground in the corridor, corridor + AGL (the floor), the
+// file's heights and, after a lift, the corrected heights.
+function renderCheckProfile(svg: SVGSVGElement, info: HTMLElement) {
+  const c = state.check!, r = c.report!;
+  const Wd = svg.clientWidth || 600, Hd = svg.clientHeight || 160, L = 44, R = 10, T = 8, B = 18;
+  const ys = [...r.stations.map(s => s.h), ...r.stations.map(s => s.under), ...r.stations.map(s => s.corridor + r.aglM), ...(c.liftedReport?.stations.map(s => s.h) ?? [])];
+  const y0 = Math.min(...ys) - 10, y1 = Math.max(...ys) + 10, sMax = r.lengthM || 1;
+  const X = (s: number) => L + ((Wd - L - R) * s) / sMax, Y = (h: number) => T + ((Hd - T - B) * (y1 - h)) / (y1 - y0);
+  const path = (pts: { s: number; v: number }[]) => pts.map((p, i) => `${i ? 'L' : 'M'}${X(p.s).toFixed(1)},${Y(p.v).toFixed(1)}`).join(' ');
+  const st = r.stations;
+  const terrain = path(st.map(s => ({ s: s.s, v: s.under }))) + ` L${X(sMax).toFixed(1)},${(Hd - B).toFixed(1)} L${L},${(Hd - B).toFixed(1)} Z`;
+  const ticks = [y0 + 10, (y0 + y1) / 2, y1 - 10].map(v => `<text class="axis" x="2" y="${(Y(v) + 4).toFixed(1)}">${fmt(v)}</text><line class="grid" x1="${L}" x2="${Wd - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/>`).join('');
+  const lifted = c.liftedReport ? `<path d="${path(c.liftedReport.stations.map(s => ({ s: s.s, v: s.h })))}" fill="none" stroke="${css('--c-transit')}" stroke-width="2"/>` : '';
+  const shortSeg = st.filter(s => s.h - s.corridor < r.aglM - r.marginM).map(s => `<circle cx="${X(s.s).toFixed(1)}" cy="${Y(s.h).toFixed(1)}" r="2" fill="${css('--c-err')}"/>`).join('');
+  svg.setAttribute('viewBox', `0 0 ${Wd} ${Hd}`);
+  svg.innerHTML = ticks + `<path class="terrain" d="${terrain}"/>` + `<path d="${path(st.map(s => ({ s: s.s, v: s.corridor })))}" fill="none" stroke="#b08a5a" stroke-width="1"/>`
+    + `<path class="agl-floor" d="${path(st.map(s => ({ s: s.s, v: s.corridor + r.aglM })))}"/>` + `<path class="flight" d="${path(st.map(s => ({ s: s.s, v: s.h })))}"/>` + shortSeg + lifted
+    + `<text class="axis" x="${Wd - R}" y="${Hd - 4}" text-anchor="end">${(sMax / 1000).toFixed(1)} km along the route</text>`;
+  $('floorLabel').textContent = 'Corridor + planned AGL';
+  info.textContent = `${c.name}: file heights ${fmt(Math.min(...st.map(s => s.h)))}–${fmt(Math.max(...st.map(s => s.h)))} m; lowest clearance ${fmt(r.minClearM)} m over the corridor` + (c.liftedReport ? ` · corrected route in blue: ${c.lifted!.length} waypoints, lowest ${fmt(c.liftedReport.minClearM)} m` : '');
+}
+$<HTMLInputElement>('fileCheck').onchange = e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) onCheckFile(f); };
+chkAgl.onchange = chkCorr.onchange = () => runCheck();
+$('chkClear').onclick = () => { checkFile = null; state.check = null; $('chkInfo').textContent = 'No mission file loaded.'; $('chkLegs').innerHTML = ''; $<HTMLButtonElement>('chkLift').disabled = true; $('chkClear').hidden = true; renderCheckMap(); renderProf(); };
+$('chkLift').onclick = async () => {
+  const c = state.check, dem = state.dem;
+  if (!c || !dem || dem.synthetic) return;
+  const info = $('chkInfo');
+  try {
+    const aglM = chkA(), corridorM = chkC();
+    const lifted = liftRoute(c.mission.wps, dem.elev, { aglM, corridorM });
+    const route = liftedRoute(c.mission, lifted, dem.elev, corridorM);
+    const files = writeWpml(route, wpmlOptionsFor(c.mission));
+    const v = verifyRouteFiles(files.templateKml, files.waylinesWpml, { elev: dem.elev, aglM, corridorM, maxClimbMs: M400_LIMITS.climbWarnMs, maxDescentMs: M400_LIMITS.descentWarnMs, maxSpeedMs: Math.max(...lifted.map(w => w.speed)), lidar: true, brakeMs2: SAFETY.brakeMs2 });
+    c.lifted = lifted; c.liftedReport = checkClearance(lifted, dem.elev, { aglM, corridorM, marginM: 0 });
+    renderCheckMap(); renderProf();
+    if (!v.ok) {
+      $('chkLegs').innerHTML = v.issues.filter(i => i.severity === 'error').slice(0, 8).map(i => `<div class="issue error"><b>${esc(i.code)}</b><span>${esc(i.message)}</span></div>`).join('');
+      info.innerHTML += `<br><span style="color:var(--c-err)">The corrected file did not pass the independent check; nothing was exported.</span>`;
+      return;
+    }
+    const name = `${c.name}-corrected_AGL${aglM}.kmz`;
+    download(name, await writeKmz(files), 'application/vnd.google-earth.kmz');
+    info.innerHTML += `<br><span style="color:var(--c-ok)">Corrected: ${lifted.length} waypoints (${lifted.filter(w => w.inserted).length} added, ${lifted.filter(w => w.slowed).length} slowed), lowest clearance ${fmt(c.liftedReport.minClearM)} m, ${(files.durationS / 60).toFixed(1)} min at the file speeds; independent check passed → ${esc(name)}</span>`;
+  } catch (e) { info.innerHTML += `<br><span style="color:var(--c-err)">${esc((e as Error).message)}</span>`; }
+};
+// The DEM as a terrain model for Pilot 2's own terrain following: EPSG:4326 GeoTIFF, each cell the highest ground
+// within the chosen radius (the planner's corridor rule, which DJI's under-the-line follow lacks), ellipsoidal heights.
+$('dsmBtn').onclick = () => {
+  const dem = state.dem;
+  if (!dem?.raster) return;
+  const dilateM = Number($<HTMLSelectElement>('dsmDilate').value) || 0;
+  const pts: LonLat[] = state.check ? state.check.mission.wps.map(w => [w.lon, w.lat] as LonLat) : state.aoi ? state.aoi.poly : [];
+  const bbox = pts.length ? bufferedBbox(pts, Math.max(1000, dilateM + 500)) : undefined;
+  try {
+    const spec = dsmFromRaster(dem.raster, { dilateM, marginM: 0, datum: 'ellipsoidal', bbox });
+    const name = `dsm-${(state.check?.name ?? state.aoi?.name ?? 'dem').replace(/[^\w-]+/g, '_').slice(0, 40)}-max${dilateM}m-ellipsoidal.tif`;
+    download(name, new Uint8Array(writeGeoTiff(spec)), 'image/tiff');
+    $('demInfo').textContent = `DSM written: ${spec.width} × ${spec.height} cells, highest ground within ${dilateM} m, WGS84 ellipsoidal heights, EPSG:4326 → ${name}. Import in Pilot 2: Mapping mission → Terrain Follow → DSM file. Check the mission it produces here before flying.`;
+  } catch (e) { $('demInfo').textContent = (e as Error).message; }
+};
 
 // ── Resume ───────────────────────────────────────────────────────
 const resSync = () => {

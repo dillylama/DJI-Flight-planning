@@ -15,3 +15,5 @@ export * from './wpml.ts';
 export * from './safety.ts';
 export * from './verify.ts';
 export * from './ugcs.ts';
+export * from './check.ts';
+export * from './geotiff-write.ts';

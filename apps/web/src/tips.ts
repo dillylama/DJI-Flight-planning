@@ -3,6 +3,11 @@
 export interface Tip { t: string; rec?: string }
 
 export const TIPS: Record<string, Tip> = {
+  check: { t: 'Measure any DJI route file against the terrain: Pilot 2 or FlightHub 2 missions planned on DJI\'s own elevation data, or a file from this planner. Every leg is sampled against the DEM, under the line and across the corridor. On 15 Oct 2026 a FlightHub 2 mission set to 320 m AGL was found to fly 271 m above the ground under the line and 248 m above ground 75 m beside it, on the hills of an open site.' },
+  chkAgl: { t: 'The height above ground the mission was planned for. Pre-filled from a mapping mission\'s template when it carries it; otherwise type it.' },
+  chkCorr: { t: 'Half-width of the strip searched for the highest ground either side of the line. 75 m is the planner default: the aircraft\'s lateral deviation plus the swath\'s inner part. 0 = only the ground directly under the line.' },
+  chkLift: { t: 'Writes the same route with heights rebuilt by this planner\'s rule: every waypoint the planned AGL above the highest ground in its corridor, extra waypoints where a straight leg would be short, speeds capped to the aircraft\'s measured climb and descent limits. The file\'s own actions are carried over (recording start/stop, IMU calibration, L3 parameters, photo spacing, signal-loss behaviour). It only downloads after passing the independent check.' },
+  dsmBtn: { t: 'Exports the loaded DEM as a GeoTIFF terrain model (EPSG:4326, WGS84 ellipsoidal heights) for Pilot 2\'s own terrain following, with every cell raised to the highest ground within the chosen radius so DJI\'s under-the-line follow inherits the planner\'s corridor rule. Import in Pilot 2: Mapping mission → Terrain Follow → DSM file. Pilot 2 does not document its vertical datum: check the first mission made from it here before flying.', rec: 'Highest ground within 75 m.' },
   sensor: { t: 'What you are flying for. LiDAR plans strips from the scan FOV and adds the IMU figure-8. Photogrammetry plans from the camera\'s GSD, frontlap and sidelap, with no figure-8.' },
   lidarMode: { t: 'L3 scan mode. Sets the across-track FOV used for the swath and the point rate used for the density estimate.' },
   camera: { t: 'Camera and lens. Sets the GSD, the image footprint and the minimum photo interval.' },
