@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import JSZip from 'jszip';
-import { writeWpml, writeKmz, planLines, buildRoute, applyHeights, makeProj, parseRouteFile, type FlightWp, type Route, type LonLat } from '../src/index.ts';
+import { writeWpml, writeKmz, planLines, buildRoute, applyHeights, makeProj, parseRouteFile, verifyRouteFiles, type FlightWp, type Route, type LonLat } from '../src/index.ts';
 
 // Flatten XML into [path, value] leaf pairs so two files can be compared field by field.
 function leaves(xml: string): [string, string][] {
@@ -157,4 +157,18 @@ test('unverified L3 values and broken numbers are refused', () => {
   assert.throws(() => writeWpml(bad), /non-numeric/);
   const zero = { ...route, wps: route.wps.map((p, i) => (i === 3 ? { ...p, speed: 0 } : p)) };
   assert.throws(() => writeWpml(zero), /speed/);
+});
+
+test('RC-lost behaviour: return home by default, or carry on with the route when asked', () => {
+  const polyRc: LonLat[] = [[22.0, -33.2], [22.01, -33.2], [22.01, -33.195], [22.0, -33.195]];
+  const plan = planLines(polyRc, { aglM: 120 });
+  const route = applyHeights(plan, buildRoute(plan, { fig8: false }), () => 100);
+  const back = writeWpml(route, {});
+  assert.ok(back.templateKml.includes('<wpml:exitOnRCLost>executeLostAction</wpml:exitOnRCLost>'));
+  assert.ok(back.waylinesWpml.includes('<wpml:executeRCLostAction>goBack</wpml:executeRCLostAction>'));
+  const on = writeWpml(route, { takeoff: { rcLost: 'continue' } });
+  assert.ok(on.templateKml.includes('<wpml:exitOnRCLost>goContinue</wpml:exitOnRCLost>'));
+  assert.ok(on.waylinesWpml.includes('<wpml:exitOnRCLost>goContinue</wpml:exitOnRCLost>'));
+  const rep = verifyRouteFiles(on.templateKml, on.waylinesWpml, { elev: () => 100, aglM: 120, corridorM: 75, maxClimbMs: 4, maxDescentMs: 3, maxSpeedMs: 20, lidar: false });
+  assert.equal(rep.rcLostAction, 'goContinue');
 });

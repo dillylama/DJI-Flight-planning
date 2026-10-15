@@ -144,6 +144,7 @@ const UNC_MAX = 200, RTH_MIN = 20, RTH_MAX = SAFETY.maxAboveHomeM;
   for (const k of Object.keys(state.params) as (keyof PlanOptions)[]) if (!FIELDS.some(f => f.key === k) && k !== 'verticalMode') delete state.params[k];
   if (state.takeoff.rthHeightM != null && !inRange(state.takeoff.rthHeightM, RTH_MIN, RTH_MAX)) state.takeoff.rthHeightM = null;
   if (state.takeoff.flyToMode != null && state.takeoff.flyToMode !== 'safely' && state.takeoff.flyToMode !== 'pointToPoint') delete state.takeoff.flyToMode;
+  if (state.takeoff.rcLost != null && state.takeoff.rcLost !== 'goBack' && state.takeoff.rcLost !== 'continue') delete state.takeoff.rcLost;
   const s = state.survey;
   if (!inRange(s.uncertaintyM, SAFETY.uncertaintyMinM, UNC_MAX)) s.uncertaintyM = SAFETY.uncertaintyDefaultM;
   if (s.demDatum !== 'orthometric' && s.demDatum !== 'ellipsoidal') s.demDatum = 'orthometric';
@@ -267,6 +268,8 @@ app.innerHTML = `
     <div class="row"><button id="setHome" class="ghost"${btnTip('setHome')}>Set home on map</button><span class="note inline" id="homeInfo">Not set</span></div>
     <div class="fields" style="margin-top:10px">
       <label><span class="lt">RTH height <em>m</em>${ti('rthHeightM')}</span><input type="number" id="rthHeight" step="10" min="${RTH_MIN}" max="${RTH_MAX}" placeholder="auto" /></label>
+      <label class="span2"><span class="lt">If the RC link is lost ${ti('rcLost')}</span>
+        <select id="rcLost"><option value="goBack">Return home (DJI's RC-lost action)</option><option value="continue">Carry on with the route (expected signal loss)</option></select></label>
       <label><span class="lt">Usable time per battery <em>min</em><i class="ti" tabindex="0" data-tip="Planning endurance per battery set, landing reserve already removed, used only to estimate how many batteries a job takes. DJI quotes 59 min flight / 53 min hover for the M400 with the light H30T only; there is no official figure with the 1.75 kg L3." data-rec="${M400_LIMITS.sortieMinDefault} min with L3 until you have your own logs.">i</i></span><input type="number" id="sortieIn" step="1" min="5" max="50" /></label>
       <details class="span2 adv"><summary>Advanced</summary><div class="fields">
         ${TK_FIELDS.map(f => fieldHtml(f, 'takeoff')).join('')}
@@ -373,6 +376,7 @@ function syncFields() {
   $<HTMLSelectElement>('tfPreset').value = match ? match.id : 'custom';
   $<HTMLInputElement>('rthHeight').value = state.takeoff.rthHeightM != null ? String(state.takeoff.rthHeightM) : '';
   $<HTMLSelectElement>('flyToMode').value = state.survey.transitInRoute ? 'route' : T('flyToMode');
+  $<HTMLSelectElement>('rcLost').value = T('rcLost');
   const ps = $<HTMLSelectElement>('profileSel');
   ps.innerHTML = profiles().map(p => opt(p.id, `${esc(p.name)} · ${p.fovDeg}°${p.khz ? ` · ${p.khz} kHz` : ''}${p.custom ? ' (yours)' : ''}`)).join('');
   ps.value = profile().id;
@@ -440,6 +444,7 @@ $('rthHeight').addEventListener('input', e => {
   persist(); schedule();
 });
 $('uncIn').addEventListener('input', e => { const v = numberIn(e.target as HTMLInputElement); if (v != null) { state.survey.uncertaintyM = v; persist(); schedule(); } });
+$('rcLost').addEventListener('change', e => { state.takeoff.rcLost = (e.target as HTMLSelectElement).value as TakeoffOptions['rcLost']; persist(); schedule(); });
 $('flyToMode').addEventListener('change', e => {
   const v = (e.target as HTMLSelectElement).value;
   state.survey.transitInRoute = v === 'route';
