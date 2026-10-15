@@ -1,5 +1,5 @@
 // Compares a processed L3 point cloud (LAS) with the DEM the route was planned on, and measures the real AGL.
-//   node tools/cloud-vs-dem.ts <cloud.las> <dem.tif> <route.kmz> [--utm 34S] [--heights ellipsoidal|egm96] [--cell 10]
+//   node tools/cloud-vs-dem.ts <cloud.las> <dem.tif> <route.kmz | --track FTR_Record.txt [--from s --to s]> [--utm 34S] [--heights ellipsoidal|egm96] [--cell 10]
 //                              [--class 2] [--every 1] [--corridor 40] [--agl 200]
 // The LAS is streamed (any size). Points are binned into square cells; the lowest point per cell is the ground
 // estimate (or, with --class N, the lowest point of that classification, e.g. 2 = ground after Terra's
@@ -15,9 +15,9 @@ import { readGeoTiff, rasterElev, parseRouteFile } from '../packages/core/src/in
 
 const args = process.argv.slice(2);
 const flag = (name: string, d?: string) => { const i = args.indexOf('--' + name); return i >= 0 ? args.splice(i, 2)[1] : d; };
-const utm = flag('utm'), geo = flag('geo'), heights = flag('heights', 'ellipsoidal'), cellM = +flag('cell', '10')!, cls = flag('class'), every = +flag('every', '1')!, corridorM = +flag('corridor', '40')!, aglPlan = +flag('agl', '0')!;
+const utm = flag('utm'), geo = flag('geo'), heights = flag('heights', 'ellipsoidal'), cellM = +flag('cell', '10')!, cls = flag('class'), every = +flag('every', '1')!, corridorM = +flag('corridor', '40')!, aglPlan = +flag('agl', '0')!, track = flag('track'), tFrom = +flag('from', '0')!, tTo = +flag('to', 'Infinity')!;
 const [lasPath, demPath, kmzPath] = args;
-if (!lasPath || !demPath || !kmzPath) { console.error('usage: node tools/cloud-vs-dem.ts <cloud.las> <dem.tif> <route.kmz> [--utm 34S | --geo lidar_geo_desc.json] [--heights ellipsoidal|egm96] [--cell 10] [--class 2] [--every 1] [--corridor 40] [--agl 200]'); process.exit(2); }
+if (!lasPath || !demPath || !(kmzPath || track)) { console.error('usage: node tools/cloud-vs-dem.ts <cloud.las> <dem.tif> <route.kmz> [--utm 34S | --geo lidar_geo_desc.json] [--heights ellipsoidal|egm96] [--cell 10] [--class 2] [--every 1] [--corridor 40] [--agl 200]'); process.exit(2); }
 // DJI Terra's default output frame is a local ENU system (lidar_geo_desc.json: cs_type LOCAL_ENU_CS, ref_GPS lat/lon/
 // ellipsoidal altitude): x = metres east, y = metres north of the reference, z = metres above its altitude.
 let enu: { lat: number; lon: number; alt: number } | null = null;
@@ -43,10 +43,30 @@ function utmToLatLon(e: number, n: number, zone: number, south: boolean): [numbe
 }
 const zone = utm ? parseInt(utm) : 0, south = utm ? /S$/i.test(utm) : false;
 
-// ---- route
-const zip = await JSZip.loadAsync(readFileSync(kmzPath));
-const wName = Object.keys(zip.files).find(f => /waylines\.wpml$/.test(f))!;
-const W = parseRouteFile(await zip.files[wName].async('string'), 'waylines').waypoints;
+// ---- route: the file that was flown, or (--track) the flown track itself from a Pilot 2 flight-task replay record
+// (FTR_Record_…, 5 Hz, ellipsoidal altitude; see compare-ftr.ts), one position every 2 s inside the mission window.
+// With --track the "route" is what the aircraft really did, so the AGL below is the real clearance of that flight.
+let W: { lat: number; lon: number; hEgm96: number }[];
+if (track) {
+  let raw = readFileSync(track);
+  if (raw[0] === 0x1f && raw[1] === 0x8b) raw = (await import('node:zlib')).gunzipSync(raw);
+  const rec = JSON.parse(raw.toString('utf8'));
+  const trig = (code: number) => rec.trigger?.find((t: { action: number }) => t.action === code);
+  const t0 = rec.flight.start_time, tStart = trig(40)?.time ?? t0, tEnd = trig(43)?.time ?? Infinity;
+  W = [];
+  let k = 0;
+  for (const f of rec.frameState) {
+    const fc = f.uav?.[0]?.fc?.[0]; if (!fc?.location || f.time < tStart || f.time > tEnd || (f.time - t0) / 1000 < tFrom || (f.time - t0) / 1000 > tTo) continue;   // --from/--to: seconds after record start, to keep only the lines (the sloped climb-out is inside the mission window)
+    if (k++ % 10) continue;
+    const { latitude: lat, longitude: lon, altitude } = fc.location;
+    W.push({ lat, lon, hEgm96: ellipsoidToEgm96(lat, lon, altitude) });
+  }
+  console.log(`track: ${W.length} positions (every 2 s) inside the mission window of ${track.split(/[\/]/).slice(-2)[0]}`);
+} else {
+  const zip = await JSZip.loadAsync(readFileSync(kmzPath));
+  const wName = Object.keys(zip.files).find(f => /waylines\.wpml$/.test(f))!;
+  W = parseRouteFile(await zip.files[wName].async('string'), 'waylines').waypoints;
+}
 const lat0 = W[0].lat, mLat = 110900, mLon = 111320 * Math.cos(lat0 * Math.PI / 180);
 const legs = W.slice(0, -1).map((a, i) => ({ ax: 0, ay: 0, bx: (W[i + 1].lon - a.lon) * mLon, by: (W[i + 1].lat - a.lat) * mLat, a, b: W[i + 1] }));
 function routeAt(lon: number, lat: number): { dist: number; h: number } {
