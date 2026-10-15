@@ -122,8 +122,8 @@ DEM clip (AOI + buffer), offline basemap tiles.
   record start/stop; it shortens executed damping to ⅓ leg ≤ 10 m, drops aircraftCalibration and the start group,
   and turns continuous shooting into takePhoto on distance. The writer now writes exactly that.
 - L3 RGB photos: with model colouring ON the L3 shoots every 2.0 s and ignores the distance trigger (G3/G4, 14 Oct
-  2026); with colouring OFF the `takePhoto` distance trigger is honoured exactly (PT flight, 15 Oct 2026). Pending:
-  does Terra colour the cloud from those photos; if yes, the planner default becomes colouring off.
+  2026); with colouring OFF the `takePhoto` distance trigger is honoured exactly (PT flight, 15 Oct 2026) and Terra
+  colours the cloud from those photos anyway → the planner always writes `modelColoringEnable 0`.
 - Breakpoint resume proven live 15 Oct 2026 (RTH mid-line, battery swap, aircraft + RC power cycle, continue from the
   breakpoint): rejoined 6 m before the stop, no calibration passes at the rejoin, photos continuous across the break.
 - The aircraft flies ~13 % under the file's waypoint speeds on average (acceleration between waypoints).

@@ -89,7 +89,9 @@ cloud records. Luke wants distance-based photos.
 **Answered 15 Oct 2026: with `modelColoringEnable 0` the distance trigger is honoured.** Same block, `takePhoto` on
 `multipleDistance` 18.8 m per line: 24 photos per full line per camera, exactly one every 18.8 m, none on run-ins,
 turns or transit; 2.3 s apart at 8 m/s and 4.7 s on the slowed legs. So: colouring on = 2 s timer, colouring off =
-our distance trigger. Whether Terra still colours the cloud from these photos is being checked in Terra.
+our distance trigger. **Terra colours the cloud from these photos regardless** (PT clouds: 93–99 % of sampled
+points carry RGB, same as the G3 cloud flown with colouring on), so the planner writes `modelColoringEnable 0`
+always; the photo interval is the planner's RGB frontlap setting.
 The MRK still lacks the exposure time on about 60 % of its lines either way; the JPG XMP has every one.
 Only these spellings are verified. The writer refuses other return and scan modes until a sample shows them.
 

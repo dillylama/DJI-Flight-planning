@@ -1472,7 +1472,9 @@ function rgbSpacingM(aglM: number): number {
 function kmzFor(route: Route<FlightWp>, aglM: number): WpmlFiles {
   return writeWpml(route, {
     takeoff: { ...TAKEOFF_DEFAULTS, ...state.takeoff },
-    lidar: { samplingRate: pulse().khz * 1000, returnMode: 'sedecupleReturn', scanningMode: 'repetitive', modelColoring: state.survey.rgbPhotos },
+    // Model colouring stays OFF: with it on the L3 shoots on a 2 s timer and ignores the distance trigger; with it
+    // off the photos follow the distance trigger and DJI Terra still colours the cloud from them (15 Oct 2026).
+    lidar: { samplingRate: pulse().khz * 1000, returnMode: 'sedecupleReturn', scanningMode: 'repetitive', modelColoring: false },
     djiImuCalibration: state.survey.djiCal && !state.survey.transitInRoute,   // belongs to the first and last waypoint of a route
     rgbPhotoSpacingM: state.survey.rgbPhotos ? +rgbSpacingM(aglM).toFixed(2) : null,
     gimbalStartGroup: false,
