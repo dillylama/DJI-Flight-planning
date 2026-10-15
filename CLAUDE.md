@@ -48,6 +48,9 @@ DEM clip (AOI + buffer), offline basemap tiles.
   first direction; compass names in the UI), "Zoom to block", "Clear mission", "Follow contours (auto course)" =
   the course optimiser (lines along the slope). "Draw block" (click corners, Enter/double-click to finish, Esc,
   Backspace undoes a corner) and "Edit corners" (draggable markers; the block name gets "(edited)").
+  Map: direction arrows along the legs and START / END labels (first/last waypoint) in the flat view; tilting the
+  map by hand switches 3D on (terrain + route at real heights via deck.gl), flattening switches it off. The style
+  needs the MapLibre demo glyphs URL for text labels.
 - **Figure-8** (IMU excitation, core only, off in the planner) before the first line, before any resumed segment, AND after the last line
   (vendors + DJI L2/L3 manuals: align at both ends for forward/backward trajectory processing). Recording runs
   from the approach waypoint (START_RECORD) through the end figure-8 to the exit waypoint (STOP_RECORD).
