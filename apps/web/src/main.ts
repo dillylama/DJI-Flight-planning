@@ -140,6 +140,7 @@ const UNC_MAX = 200, RTH_MIN = 20, RTH_MAX = SAFETY.maxAboveHomeM;
   if (state.params.verticalMode != null && state.params.verticalMode !== 'slow' && state.params.verticalMode !== 'raise') delete state.params.verticalMode;
   if (state.params.startSide != null && state.params.startSide !== 'left' && state.params.startSide !== 'right') delete state.params.startSide;
   if (state.params.startEnd != null && state.params.startEnd !== 'near' && state.params.startEnd !== 'far') delete state.params.startEnd;
+  if (state.params.edgeLines != null && state.params.edgeLines !== 'inside' && state.params.edgeLines !== 'over') delete state.params.edgeLines;
   for (const k of Object.keys(state.params) as (keyof PlanOptions)[]) if (!FIELDS.some(f => f.key === k) && k !== 'verticalMode') delete state.params[k];
   if (state.takeoff.rthHeightM != null && !inRange(state.takeoff.rthHeightM, RTH_MIN, RTH_MAX)) state.takeoff.rthHeightM = null;
   if (state.takeoff.flyToMode != null && state.takeoff.flyToMode !== 'safely' && state.takeoff.flyToMode !== 'pointToPoint') delete state.takeoff.flyToMode;
@@ -255,6 +256,8 @@ app.innerHTML = `
       <details class="span2 adv"><summary>Advanced</summary><div class="fields">
         ${FIELDS.filter(f => f.adv).map(f => fieldHtml(f, 'plan')).join('')}
         <label><span class="lt">Terrain + position uncertainty <em>m</em>${ti('uncertaintyM')}</span><input type="number" id="uncIn" step="5" min="${SAFETY.uncertaintyMinM}" max="${UNC_MAX}" /></label>
+        <label class="span2"><span class="lt">Outer lines ${ti('edgeLines')}</span>
+          <select id="edgeLines"><option value="inside">Swath edge on the block edge (as FlightHub 2)</option><option value="over">Lines over the edges (half a strip outside, more margin)</option></select></label>
       </div></details>
     </div>
     <div class="row"><button id="optCourse" class="ghost" disabled${btnTip('optCourse')}>Follow contours (auto course)</button><button id="resetParams" class="link">Reset defaults</button></div>
@@ -365,6 +368,7 @@ function syncFields() {
     i.value = String(i.dataset.group === 'plan' ? P(i.dataset.key as keyof PlanOptions) : T(i.dataset.key as keyof TakeoffOptions));
   });
   refreshStartCorner();
+  $<HTMLSelectElement>('edgeLines').value = P('edgeLines');
   const match = TF_PRESETS.find(p => p.wpSpacingM === P('wpSpacingM') && p.thinToleranceM === P('thinToleranceM') && p.corridorM === P('corridorM'));
   $<HTMLSelectElement>('tfPreset').value = match ? match.id : 'custom';
   $<HTMLInputElement>('rthHeight').value = state.takeoff.rthHeightM != null ? String(state.takeoff.rthHeightM) : '';
@@ -489,6 +493,7 @@ $('startCorner').addEventListener('change', e => {
   const [s, en] = (e.target as HTMLSelectElement).value.split('-');
   state.params = { ...state.params, startSide: s as 'left' | 'right', startEnd: en as 'near' | 'far' }; change();
 });
+$('edgeLines').addEventListener('change', e => { state.params = { ...state.params, edgeLines: (e.target as HTMLSelectElement).value as 'inside' | 'over' }; change(); });
 $('zoomBlock').onclick = () => fitAoi();
 $('clearMission').onclick = () => {
   if (!state.aoi) return;

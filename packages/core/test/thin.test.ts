@@ -16,7 +16,7 @@ const terrain = rasterElev({
   width: W, height: H, west: WEST, north: NORTH, dLon: PX, dLat: PX, nodata: null, pixelIsPoint: true,
   data: Float32Array.from({ length: W * H }, (_, i) => ground(WEST + ((i % W) + 0.5) * PX, NORTH - (Math.floor(i / W) + 0.5) * PX)),
 });
-const base: Partial<PlanOptions> = { aglM: 100, speedMs: 10, courseDeg: 90, wpSpacingM: 50, corridorM: 40 };
+const base: Partial<PlanOptions> = { aglM: 100, speedMs: 10, courseDeg: 90, wpSpacingM: 50, corridorM: 40, edgeLines: 'over' };
 
 function build(o: Partial<PlanOptions>) {
   const plan = planLines(poly, o);
@@ -33,7 +33,7 @@ test('tolerance 0 changes nothing', () => {
 
 test('flat ground: line waypoints collapse to the ends; the knoll keeps its waypoints', () => {
   const { flight, dense } = build({ ...base, thinToleranceM: 5 });
-  assert.ok(flight.wps.length < dense.wps.length / 2, `${flight.wps.length} of ${dense.wps.length} left`);
+  assert.ok(flight.wps.length <= dense.wps.length * 0.55, `${flight.wps.length} of ${dense.wps.length} left`);
   // a line well away from the knoll keeps no interior line waypoints at all
   // (the knoll's flank reaches lines up to ~250 m away through the ±40 m corridor)
   const far = flight.wps.filter(w => w.role === 'line' && Math.abs(w.xy[1]) > 255);

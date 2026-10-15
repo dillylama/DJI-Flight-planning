@@ -36,6 +36,10 @@ export interface PlanOptions {
   // which end of it the first line is flown from ('near' = the end behind you when looking along the course).
   startSide: 'left' | 'right';
   startEnd: 'near' | 'far';
+  // Where the outermost lines go. 'inside' (default, as FlightHub 2): the swath edge of the first and last line sits
+  // on the block edge, so no strip is flown outside the block. 'over': lines centred on the block with the outer
+  // ones up to half a strip outside it (the original layout; one or two more lines, extra margin at the edges).
+  edgeLines: 'inside' | 'over';
 }
 
 export const DEFAULTS: PlanOptions = {
@@ -66,6 +70,7 @@ export const DEFAULTS: PlanOptions = {
   thinToleranceM: 10,
   startSide: 'left',
   startEnd: 'near',
+  edgeLines: 'inside',
 };
 
 export interface Line {
@@ -102,6 +107,7 @@ function checkInputs(poly: LonLat[], o: PlanOptions): void {
   if (o.thinToleranceM > 500) bad('thinToleranceM must be 500 m or less.');
   if (o.startSide !== 'left' && o.startSide !== 'right') bad('startSide must be left or right.');
   if (o.startEnd !== 'near' && o.startEnd !== 'far') bad('startEnd must be near or far.');
+  if (o.edgeLines !== 'inside' && o.edgeLines !== 'over') bad('edgeLines must be inside or over.');
   for (const k of nonNeg) if (!Number.isFinite(o[k] as number) || (k !== 'courseDeg' && (o[k] as number) < 0)) bad(`${k} must be a number, 0 or more.`);
   if (!(o.fovDeg >= 1 && o.fovDeg <= 150)) bad('fovDeg must be between 1° and 150°.');
   if (!(o.sidelapPct >= 0 && o.sidelapPct <= 90)) bad('sidelapPct must be between 0 and 90 %.');
@@ -129,14 +135,20 @@ export function planLines(polyLonLat: LonLat[], opts: Partial<PlanOptions> = {},
   const spacing = swath * (1 - o.sidelapPct / 100);
   const vs = uv.map(p => p[1]);
   const vmin = Math.min(...vs), vmax = Math.max(...vs);
-  const n = Math.ceil((vmax - vmin) / spacing) + 1;
+  // 'inside': the outer lines sit half a swath in from the block edges and the rest are spread evenly between them
+  // (never further apart than `spacing`); a block narrower than one swath gets a single line down its middle.
+  // 'over': lines centred on the block at exactly `spacing`, the outer ones up to half a strip outside it.
+  const inner = o.edgeLines === 'inside' ? Math.max(0, vmax - vmin - swath) : vmax - vmin;
+  const n = Math.ceil(inner / spacing) + 1;
   if (!(spacing > 0) || !(n <= 2000)) throw new Error(`Line spacing ${spacing.toFixed(1)} m gives ${n} lines for this block: check AGL, field of view and sidelap.`);
-  const vStart = (vmin + vmax) / 2 - ((n - 1) * spacing) / 2;
+  const step = n > 1 ? (o.edgeLines === 'inside' ? inner / (n - 1) : spacing) : 0;
+  const vStart = (vmin + vmax) / 2 - ((n - 1) * step) / 2;
 
   const strips: { v: number; umin: number; umax: number }[] = [];
+  const half = o.edgeLines === 'inside' ? swath / 2 : spacing / 2;   // a line is as long as the block is under its swath / its strip
   for (let i = 0; i < n; i++) {
-    const v = vStart + i * spacing;
-    const ext = bandExtent(uv, v - spacing / 2, v + spacing / 2);
+    const v = vStart + i * step;
+    const ext = bandExtent(uv, v - half, v + half);
     if (ext) strips.push({ v, umin: ext[0], umax: ext[1] });
   }
   // Start corner: lines are ordered from the chosen side (v grows to the right of the course), and the first line

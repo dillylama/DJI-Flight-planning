@@ -90,7 +90,7 @@ test('turn rounding stays inside the terrain corridor; rounding and pull-up lag 
     // a 90° turn between lines on level ground: 40 % of the cross leg, cut to 90 % of a narrow corridor
     const level = applyHeights(plan, buildRoute(plan), () => 100).wps;
     const turnWp = level.findIndex((w, i) => w.role === 'runout' && i + 1 < level.length && level[i + 1].role === 'runin');
-    assert.ok(Math.abs(level[turnWp].dampingM - Math.min(0.4 * plan.spacing, 0.9 * corridorM)) < 1e-6, `damping at a line turn: ${level[turnWp].dampingM}`);
+    assert.ok(Math.abs(level[turnWp].dampingM - Math.min(0.4 * Math.abs(plan.lines[1].v - plan.lines[0].v), 0.9 * corridorM)) < 1e-6, `damping at a line turn: ${level[turnWp].dampingM}`);
     assert.ok(Math.abs(level[turnWp].turnM - level[turnWp].dampingM) < 1e-6, 'a 90° turn can swing its whole damping distance');
   }
   // level ground: nothing to round vertically and nothing to lag behind
@@ -100,7 +100,7 @@ test('turn rounding stays inside the terrain corridor; rounding and pull-up lag 
   // in (17 m/s → 81 m), held to a third of the shorter leg (the cross leg here, with 150 m run-ins) and the 60 m cap
   assert.ok(flat.wps.filter(w => w.role === 'line').every(w => Math.abs(w.dampingM - 10) < 1e-9));
   const corner = flat.wps.findIndex((w, i) => w.role === 'runout' && flat.wps[i + 1]?.role === 'runin');
-  assert.ok(Math.abs(flat.wps[corner].dampingM - Math.min(60, plan.spacing / 3, 17 * 17 / (9.81 * Math.tan(20 * Math.PI / 180)))) < 1e-6, `corner damping ${flat.wps[corner].dampingM}`);
+  assert.ok(Math.abs(flat.wps[corner].dampingM - Math.min(60, Math.abs(plan.lines[1].v - plan.lines[0].v) / 3, 17 * 17 / (9.81 * Math.tan(20 * Math.PI / 180)))) < 1e-6, `corner damping ${flat.wps[corner].dampingM}`);
   assert.ok(flat.wps.every(w => w.roundingM === 0 && w.lagM === 0));
   const b = clearanceBudget(plan, flat, 20);
   assert.deepEqual([b.aglM, b.pathM, b.uncertaintyM, b.worstCaseM], [150, 0, 20, 130]);
@@ -158,13 +158,16 @@ test('figure-8 at the end: after the last run-out, then an exit point that stops
   assert.equal(roles.at(-1), 'exit');
   assert.deepEqual(r.wps.at(-1)!.actions, ['STOP_RECORD']);
   assert.equal(r.wps.filter(w => w.actions.includes('STOP_RECORD')).length, 1);
+  // without an end figure-8 the route ends on the last line itself: no run-out (data stops at the block edge)
   const noEnd = buildRoute(plan, { fig8End: false });
-  assert.equal(noEnd.wps.at(-1)!.role, 'runout');
+  assert.equal(noEnd.wps.at(-1)!.role, 'line');
+  assert.deepEqual(noEnd.wps.at(-1)!.actions, ['STOP_RECORD']);
   assert.ok(r.wps.length > noEnd.wps.length);
+  assert.equal(buildRoute(plan, { fig8End: false, endRunOut: true }).wps.at(-1)!.role, 'runout');
 });
 
 test('overlap bands between consecutive lines: flat ground gives the planned sidelap', () => {
-  const plan = planLines(poly, { aglM: 300 });
+  const plan = planLines(poly, { aglM: 300, edgeLines: 'over' });
   const f = applyHeights(plan, buildRoute(plan), () => 100);
   const c = coverage(plan, f);
   assert.equal(c.overlaps.length, plan.lines.length - 1);
