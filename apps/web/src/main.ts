@@ -7,7 +7,7 @@ import {
   DEFAULTS, TAKEOFF_DEFAULTS, M400_LIMITS, M400_SPEC, L3_PULSE, L3_SCAN, CAMERAS, SAFETY,
   planLines, buildRoute, flightRoute, stats, validate, readGeoTiff, rasterElev, rasterBbox, rasterGaps,
   bufferedBbox, openTopoUrl, planTransit, coverage, checkLimits, planSorties, writeWpml, writeKmz,
-  cameraFovDeg, gsdCm, aglForGsd, photoPlan, frontlapAtInterval, lidarDensity,
+  cameraFovDeg, gsdCm, aglForGsd, photoPlan, lidarDensity,
   safetyChecks, clearanceBudget, verifyRouteFiles, toUgcsCsv,
   type PlanOptions, type Plan, type Route, type FlightWp, type RouteStats, type Issue, type ElevFn, type Bbox,
   type LonLat, type TakeoffOptions, type Transit, type Coverage, type Pt3, type Camera, type PhotoPlan, type SortiePlan,
@@ -37,8 +37,8 @@ interface Result {
 // What the map/profile show: the whole job, or one sortie.
 interface View { plan: Plan; route: Route; flight: Route<FlightWp> | null; dense?: Route<FlightWp> | null; transit: Transit | null; cov: Coverage | null; issues: PlanIssue[]; lastLine: number }
 type SensorKind = 'lidar' | 'photo';
-interface SurveyCfg { sensor: SensorKind; pulse: string; scan: string; fig8: boolean; camera: string; frontlap: number; shutterInv: number; sortieMin: number; sortieOverlap: number; maxWp: number | null; djiCal: boolean; rgbPhotos: boolean; fig8End: boolean; uncertaintyM: number; demDatum: VerticalDatum; transitInRoute: boolean; profile: string }
-const SURVEY_DEFAULTS: SurveyCfg = { sensor: 'lidar', pulse: '100', scan: 'linear', fig8: false, camera: 'p1-35', frontlap: 80, shutterInv: 1000, sortieMin: M400_LIMITS.sortieMinDefault, sortieOverlap: 0, maxWp: null, djiCal: true, rgbPhotos: true, fig8End: false, uncertaintyM: SAFETY.uncertaintyDefaultM, demDatum: 'orthometric', transitInRoute: false, profile: 'l3' };
+interface SurveyCfg { sensor: SensorKind; pulse: string; scan: string; fig8: boolean; camera: string; frontlap: number; shutterInv: number; sortieMin: number; sortieOverlap: number; maxWp: number | null; djiCal: boolean; rgbPhotos: boolean; rgbFrontlap: number; fig8End: boolean; uncertaintyM: number; demDatum: VerticalDatum; transitInRoute: boolean; profile: string }
+const SURVEY_DEFAULTS: SurveyCfg = { sensor: 'lidar', pulse: '100', scan: 'linear', fig8: false, camera: 'p1-35', frontlap: 80, shutterInv: 1000, sortieMin: M400_LIMITS.sortieMinDefault, sortieOverlap: 0, maxWp: null, djiCal: true, rgbPhotos: true, rgbFrontlap: 75, fig8End: false, uncertaintyM: SAFETY.uncertaintyDefaultM, demDatum: 'orthometric', transitInRoute: false, profile: 'l3' };
 // LiDAR sensor profiles: a name, the across-track field of view used for line spacing, and the pulse rate used
 // for the density estimate. Route files are only written for the Zenmuse L3 (the one whose values were copied
 // from Pilot 2 exports); the others are for planning. Your own profiles are kept in this browser.
@@ -114,7 +114,7 @@ const FIELDS: Field<keyof PlanOptions>[] = [
   { key: 'speedMs', label: 'Line speed', unit: 'm/s', step: 0.5, min: 1, max: M400_LIMITS.lineSpeedMaxMs },
   { key: 'sidelapPct', label: 'Sidelap', unit: '%', step: 5, min: 0, max: 90 },
   { key: 'courseDeg', label: 'Line course', unit: '°', step: 1, min: 0, max: 359 },
-  { key: 'thinToleranceM', label: 'Thinning tolerance', unit: 'm', step: 5, min: 0, max: 200 },
+  { key: 'thinToleranceM', label: 'Thinning tolerance', unit: 'm', step: 5, min: 0, max: 200, adv: true },
   { key: 'fovDeg', label: 'FOV used', unit: '°', step: 1, min: 10, max: 120, only: 'lidar', adv: true },
   { key: 'runInM', label: 'Run-in', unit: 'm', step: 10, min: 20, max: 1000, adv: true },
   { key: 'runOutM', label: 'Run-out', unit: 'm', step: 10, min: 20, max: 1000, adv: true },
@@ -152,6 +152,7 @@ const UNC_MAX = 200, RTH_MIN = 20, RTH_MAX = SAFETY.maxAboveHomeM;
   s.fig8 = false; s.fig8End = false;
   if (!inRange(s.sortieMin, 5, 50)) s.sortieMin = M400_LIMITS.sortieMinDefault;
   if (!inRange(s.sortieOverlap, 0, 2)) s.sortieOverlap = 0;
+  if (!inRange(s.rgbFrontlap, 50, 95)) s.rgbFrontlap = 75;
   if (s.maxWp != null && !inRange(s.maxWp, 50, 65535)) s.maxWp = null;
   if (!inRange(s.frontlap, 50, 95)) s.frontlap = SURVEY_DEFAULTS.frontlap;
   if (!inRange(s.shutterInv, 100, 8000)) s.shutterInv = SURVEY_DEFAULTS.shutterInv;
@@ -163,6 +164,15 @@ const btnTip = (k: string) => TIPS[k] ? ` data-tip="${esc(TIPS[k].t)}"` : '';
 const fieldHtml = (f: Field<string>, group: string) =>
   `<label${f.only ? ` data-only="${f.only}"` : ''}${f.vmode ? ` data-vmode="${f.vmode}"` : ''}><span class="lt">${f.label} <em>${f.unit}</em>${ti(f.key)}</span><input type="number" data-group="${group}" data-key="${f.key}" step="${f.step}" min="${f.min}" max="${f.max}" /></label>`;
 const opt = (v: string, label: string) => `<option value="${v}">${label}</option>`;
+
+// Terrain-following presets: how closely the route hugs the ground. They set waypoint spacing (how finely the
+// terrain is sampled along a line), the thinning tolerance (how much extra height is accepted to drop waypoints)
+// and the corridor width. Anything else is "Custom".
+const TF_PRESETS = [
+  { id: 'precise', label: 'Precise: hug the terrain (slow, many waypoints)', wpSpacingM: 50, thinToleranceM: 5, corridorM: 40 },
+  { id: 'standard', label: 'Standard', wpSpacingM: DEFAULTS.wpSpacingM, thinToleranceM: DEFAULTS.thinToleranceM, corridorM: DEFAULTS.corridorM },
+  { id: 'fast', label: 'Fast: open ground, quick collection (few waypoints)', wpSpacingM: 250, thinToleranceM: 40, corridorM: 100 },
+] as const;
 
 // Base maps: free raster tile services that need no key. The choice is remembered in this browser.
 const BASEMAPS = [
@@ -223,6 +233,7 @@ app.innerHTML = `
       <label data-l3><span class="lt">Scan mode</span><select id="scanSel">${L3_SCAN.map(s => opt(s.id, `${s.name} ${s.fovH}°×${s.fovV}°`)).join('')}</select></label>
       <label class="check span2" data-l3><input type="checkbox" id="djiCalOn" /> DJI IMU calibration at start and end ${ti('djiCal')}</label>
       <label class="check span2" data-l3><input type="checkbox" id="rgbOn" /> L3 RGB photos on data lines ${ti('rgbPhotos')}</label>
+      <label data-l3><span class="lt">RGB frontlap <em>%</em>${ti('rgbFrontlap')}</span><input type="number" id="rgbFrontlapIn" step="5" min="50" max="95" /></label>
     </div>
     <div class="fields" data-only="photo">
       <label class="span2"><span class="lt">Camera ${ti('camera')}</span><select id="camSel">${CAMERAS.map(c => opt(c.id, c.name)).join('')}</select></label>
@@ -234,7 +245,10 @@ app.innerHTML = `
   </section>
   <section>
     <h2>Flight</h2>
-    <div class="fields" id="fields">${FIELDS.filter(f => !f.adv).map(f => fieldHtml(f, 'plan')).join('')}
+    <div class="fields" id="fields">
+      <label class="span2"><span class="lt">Terrain following ${ti('tfPreset')}</span>
+        <select id="tfPreset">${TF_PRESETS.map(p => opt(p.id, p.label)).join('')}<option value="custom">Custom (see Advanced)</option></select></label>
+      ${FIELDS.filter(f => !f.adv).map(f => fieldHtml(f, 'plan')).join('')}
       <label><span class="lt">Start corner ${ti('startCorner')}</span><select id="startCorner"><option value="left-near"></option><option value="right-near"></option><option value="left-far"></option><option value="right-far"></option></select></label>
       <label class="span2"><span class="lt">Vertical profile ${ti('verticalMode')}</span>
         <select id="vmodeSel"><option value="slow">Follow terrain; slow down to the climb/descent limits</option><option value="raise">Keep line speed; raise waypoints (gradient limit)</option></select></label>
@@ -351,6 +365,8 @@ function syncFields() {
     i.value = String(i.dataset.group === 'plan' ? P(i.dataset.key as keyof PlanOptions) : T(i.dataset.key as keyof TakeoffOptions));
   });
   refreshStartCorner();
+  const match = TF_PRESETS.find(p => p.wpSpacingM === P('wpSpacingM') && p.thinToleranceM === P('thinToleranceM') && p.corridorM === P('corridorM'));
+  $<HTMLSelectElement>('tfPreset').value = match ? match.id : 'custom';
   $<HTMLInputElement>('rthHeight').value = state.takeoff.rthHeightM != null ? String(state.takeoff.rthHeightM) : '';
   $<HTMLSelectElement>('flyToMode').value = state.survey.transitInRoute ? 'route' : T('flyToMode');
   const ps = $<HTMLSelectElement>('profileSel');
@@ -369,6 +385,8 @@ function syncFields() {
   $<HTMLInputElement>('frontlapIn').value = String(s.frontlap);
   $<HTMLInputElement>('shutterIn').value = String(s.shutterInv);
   $<HTMLInputElement>('sortieIn').value = String(s.sortieMin);
+  $<HTMLInputElement>('rgbFrontlapIn').value = String(s.rgbFrontlap);
+  $<HTMLInputElement>('rgbFrontlapIn').disabled = !s.rgbPhotos;
   $<HTMLInputElement>('overlapIn').value = String(s.sortieOverlap);
   $<HTMLInputElement>('maxWpIn').value = s.maxWp != null ? String(s.maxWp) : '';
   $<HTMLInputElement>('uncIn').value = String(s.uncertaintyM);
@@ -448,6 +466,11 @@ $('pfDel').onclick = () => {
   change();
 };
 $('resetParams').onclick = () => { state.params = {}; change(); };
+$('tfPreset').addEventListener('change', e => {
+  const p = TF_PRESETS.find(x => x.id === (e.target as HTMLSelectElement).value);
+  if (!p) return;   // "Custom" is only ever shown, never chosen
+  state.params = { ...state.params, wpSpacingM: p.wpSpacingM, thinToleranceM: p.thinToleranceM, corridorM: p.corridorM }; change();
+});
 // Start corner: names follow the compass for the current course. Left/right are seen looking along the course;
 // 'near' is the end behind you, so for course 90 (lines east–west) left-near is the north-west corner.
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -489,6 +512,7 @@ $('scanSel').addEventListener('change', e => { state.survey.scan = (e.target as 
 $('vmodeSel').addEventListener('change', e => { state.params.verticalMode = (e.target as HTMLSelectElement).value as PlanOptions['verticalMode']; change(); });
 $('djiCalOn').addEventListener('change', e => { state.survey.djiCal = (e.target as HTMLInputElement).checked; change(); });
 $('rgbOn').addEventListener('change', e => { state.survey.rgbPhotos = (e.target as HTMLInputElement).checked; change(); });
+$('rgbFrontlapIn').addEventListener('input', e => { const v = numberIn(e.target as HTMLInputElement); if (v != null) { state.survey.rgbFrontlap = v; change(); } });
 $('camSel').addEventListener('change', e => { state.survey.camera = (e.target as HTMLSelectElement).value; change(); });
 $('gsdIn').addEventListener('input', e => {
   const i = e.target as HTMLInputElement, g = numberIn(i);
@@ -1098,7 +1122,13 @@ function renderStats(r: Result | null) {
       ...(cov ? [['Swath on lines', `${fmt(cov.swathMinM)}–${fmt(cov.swathMaxM)} m`] as Row] : []),
     );
     const rgb = CAMERAS.find(c => c.id === 'l3-100')!;
-    if (isL3()) rows.push(['L3 RGB GSD / frontlap', `${fmt(gsdCm(rgb, plan.o.aglM), 1)} cm · ${fmt(frontlapAtInterval(rgb, plan.o.aglM, route.speedMs, rgb.minIntervalS))} %`, 'L3 100 MP mapping cameras at nominal AGL, shooting every 1 s (their minimum).']);
+    if (isL3()) {
+      const everyM = rgbSpacingM(plan.o.aglM), minGapM = route.speedMs * rgb.minIntervalS;
+      rows.push(['L3 RGB GSD / photo spacing', state.survey.rgbPhotos
+        ? `${fmt(gsdCm(rgb, plan.o.aglM), 1)} cm · every ${fmt(everyM)} m (${state.survey.rgbFrontlap} % frontlap)${everyM < minGapM ? ` · ⚠ needs ${fmt(minGapM)} m at ${fmt(route.speedMs, 1)} m/s` : ''}`
+        : `${fmt(gsdCm(rgb, plan.o.aglM), 1)} cm · photos off`,
+        `L3 100 MP mapping cameras at nominal AGL, distance trigger. Their fastest rate is one photo per ${rgb.minIntervalS} s, so at line speed the spacing cannot be below ${fmt(minGapM)} m; the planner warns when the chosen frontlap asks for less.`]);
+    }
   }
   if (st) rows.push('Flight',
     ['Route', `${fmt(st.routeKm, 1)} km (${fmt(st.dataKm, 1)} on lines)`],
@@ -1436,7 +1466,8 @@ function kmzBlocker(): string | null {
 }
 function rgbSpacingM(aglM: number): number {
   const c = CAMERAS.find(c => c.id === 'l3-100')!;
-  return 2 * aglM * Math.tan((c.vfovDeg / 2) * Math.PI / 180) * (1 - 0.75);   // 75 % frontlap, as Pilot 2's L3 default
+  // photo every (footprint along track × (1 − frontlap)) metres: a distance trigger, never a timer
+  return 2 * aglM * Math.tan((c.vfovDeg / 2) * Math.PI / 180) * (1 - state.survey.rgbFrontlap / 100);
 }
 function kmzFor(route: Route<FlightWp>, aglM: number): WpmlFiles {
   return writeWpml(route, {
