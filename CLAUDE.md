@@ -135,6 +135,9 @@ DEM clip (AOI + buffer), offline basemap tiles.
 - Breakpoint resume proven live 15 Oct 2026 (RTH mid-line, battery swap, aircraft + RC power cycle, continue from the
   breakpoint): rejoined 6 m before the stop, no calibration passes at the rejoin, photos continuous across the break.
 - The aircraft flies ~13 % under the file's waypoint speeds on average (acceleration between waypoints).
+- Vertical-rate defaults 3.5 / 2.5 m/s since 15 Oct 2026: the M400's own wayline limits (G4/G5/G6). Pilot 2's
+  ascent/descent sliders do not apply to waylines (G6 flown at 8 / 6: no change). Faster on steep ground = geometry:
+  lines along contours, or the "keep line speed" (raise) profile.
 - **Speed rule changed 15 Oct 2026 (docs/safety.md §3)**: measured on G4/PT, the M400 brakes to a lower target in
   the last ~10 m BEFORE the waypoint (≥ 4 m/s²) and accelerates to a higher one AFTER it, so on a leg it is never
   faster than that leg's own target. A waypoint speed is now capped by its own leg's limit and by what can brake to
