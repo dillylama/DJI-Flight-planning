@@ -521,6 +521,7 @@ const map = new maplibregl.Map({
   container: 'map',
   style: {
     version: 8,
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',   // for the START / END labels
     sources: {
       ...Object.fromEntries(BASEMAPS.map(b => ['bm-' + b.id, { type: 'raster', tileSize: 256, maxzoom: b.maxzoom, tiles: [...b.tiles], attribution: b.attribution }])),
       terrain3d: {
@@ -578,6 +579,22 @@ function onStyleReady() {   // style ready: add our layers without waiting for e
       'circle-stroke-color': ['case', ['get', 'flag'], css('--c-err'), '#1c1c1c'], 'circle-stroke-width': ['case', ['get', 'flag'], 2.5, 1] } });
   map.addLayer({ id: 'rec', type: 'circle', source: 'rec',
     paint: { 'circle-radius': 7, 'circle-color': ['case', ['get', 'start'], css('--c-line'), css('--c-appr')], 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
+  // Direction of flight along every leg (flat view), and START / END labels on the first and last waypoint.
+  {
+    const c = document.createElement('canvas'); c.width = c.height = 16;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#ffffff'; g.strokeStyle = '#000000'; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(2, 2); g.lineTo(14, 8); g.lineTo(2, 14); g.closePath(); g.fill(); g.stroke();
+    if (!map.hasImage('arrow')) map.addImage('arrow', g.getImageData(0, 0, 16, 16));
+  }
+  map.addLayer({ id: 'route-arrows', type: 'symbol', source: 'route', minzoom: 11,
+    layout: { 'symbol-placement': 'line', 'symbol-spacing': 90, 'icon-image': 'arrow', 'icon-size': 0.8, 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-keep-upright': false, 'icon-allow-overlap': true, 'icon-ignore-placement': true },
+    paint: { 'icon-opacity': 0.9 } });
+  map.addSource('ends', { type: 'geojson', data: empty });
+  map.addLayer({ id: 'ends-dot', type: 'circle', source: 'ends', paint: { 'circle-radius': 9, 'circle-color': ['case', ['get', 'start'], '#2ecc71', '#e74c3c'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
+  map.addLayer({ id: 'ends-label', type: 'symbol', source: 'ends',
+    layout: { 'text-field': ['get', 'label'], 'text-size': 12, 'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'], 'text-offset': [0, -1.6], 'text-anchor': 'bottom', 'text-allow-overlap': true },
+    paint: { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1.5 } });
   map.addSource('draw', { type: 'geojson', data: empty });
   map.addLayer({ id: 'draw-fill', type: 'fill', source: 'draw', filter: ['==', '$type', 'Polygon'], paint: { 'fill-color': css('--c-aoi'), 'fill-opacity': 0.12 } });
   map.addLayer({ id: 'draw-line', type: 'line', source: 'draw', filter: ['==', '$type', 'LineString'], paint: { 'line-color': css('--c-aoi'), 'line-width': 2, 'line-dasharray': [2, 1.5] } });
@@ -712,6 +729,8 @@ function applyView(animate = true) {
   map.setLayoutProperty('overlap-line', 'visibility', vis(L.overlaps));
   map.setLayoutProperty('route-line', 'visibility', vis(flat));
   map.setFilter('route-line', ['in', ['get', 'role'], ['literal', visibleRoles()]]);
+  map.setLayoutProperty('route-arrows', 'visibility', vis(flat));
+  map.setFilter('route-arrows', ['in', ['get', 'role'], ['literal', visibleRoles()]]);
   map.setFilter('route-hit', ['in', ['get', 'role'], ['literal', visibleRoles()]]);
   map.setLayoutProperty('wps', 'visibility', vis(flat && L.wps));
   map.setFilter('wps', ['in', ['get', 'role'], ['literal', visibleRoles()]]);
@@ -722,6 +741,12 @@ function applyView(animate = true) {
   renderDeck(state.view);
 }
 $('view3d').onclick = () => { state.view3d = !state.view3d; persist(); applyView(); };
+// Tilting the map by hand (right-drag / ctrl-drag) is the same as pressing 3D: terrain on and the route drawn at
+// its real heights. Flattening it again goes back to the 2D drawing with the direction arrows.
+map.on('pitchend', () => {
+  const tilted = map.getPitch() > 5;
+  if (tilted !== state.view3d) { state.view3d = tilted; persist(); applyView(false); }
+});
 $('layersBtn').onclick = () => { $('layersPanel').hidden = !$('layersPanel').hidden; };
 $('layersPanel').addEventListener('change', e => {
   const i = e.target as HTMLInputElement;
@@ -986,7 +1011,7 @@ function renderMap(r: View | null) {
   if (!mapReady) return;
   const aoi = state.aoi;
   src('aoi')!.setData(aoi ? { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[...aoi.poly, aoi.poly[0]]] } } : empty);
-  if (!r) { for (const id of ['route', 'wps', 'rec', 'swath', 'overlap', 'transit', 'rth']) src(id)!.setData(empty); return; }
+  if (!r) { for (const id of ['route', 'wps', 'rec', 'swath', 'overlap', 'transit', 'rth', 'ends']) src(id)!.setData(empty); return; }
   const flagged = new Set(r.issues.filter(i => i.severity !== 'info').flatMap(i => i.wps ?? []));
   src('route')!.setData({ type: 'FeatureCollection', features: segments(r, false).map(c => ({
     type: 'Feature', properties: { role: c.role, line: c.line ?? '', sel: c.line === state.selLine }, geometry: { type: 'LineString', coordinates: c.coords } })) });
@@ -1005,6 +1030,12 @@ function renderMap(r: View | null) {
     geometry: { type: 'Polygon', coordinates: [[...o.poly, o.poly[0]]] } })) });
   src('transit')!.setData(lineFc(r.transit?.path));
   src('rth')!.setData(lineFc(r.transit?.rthFromLast));
+  {
+    // START = the first waypoint of the route (approach, where recording starts); END = the last (exit).
+    const w = r.flight?.wps ?? [], a = w[0], b = w[w.length - 1];
+    const pt = (x: { lon: number; lat: number } | undefined, start: boolean) => x ? [{ type: 'Feature' as const, properties: { start, label: start ? 'START' : 'END' }, geometry: { type: 'Point' as const, coordinates: [x.lon, x.lat] } }] : [];
+    src('ends')!.setData({ type: 'FeatureCollection', features: [...pt(a, true), ...pt(b, false)] });
+  }
 }
 
 // ── Render: 3D (deck.gl, true heights) ───────────────────────────
