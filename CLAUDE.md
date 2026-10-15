@@ -193,5 +193,10 @@ DEM clip (AOI + buffer), offline basemap tiles.
 ## Progress tracker
 - docs/progress.html is the project timeline/gates page, published as an artifact (URL in memory). Update it and
   republish at every milestone; commit docs-only changes straight to main.
+- **FH2 comparison (15 Oct 2026, samples/fh2test/FH2-comparison-2026-10-15.txt)**: same 379 ha block, 4 lines, 320 m,
+  17 m/s, flown back to back. FH2 21.0 min, planner 24.0 min total. ~50 s = take-off profile (planner used DJI "safely":
+  vertical climb then level transit → default now pointToPoint), ~60 s = more slowed legs at the koppies (corridor rule
+  steps vs FH2's under-the-line follow), ~40 s = planner ended at the far corner. Turns equal (~35-40 s each), no stops at
+  waypoints in either, lines at 14.2 vs 15.0 m/s. Waypoints 99 vs 203 made no speed difference.
 - RC-lost behaviour is a take-off option (`rcLost`: goBack = DJI RC-lost action, continue = WPML exitOnRCLost goContinue),
   planner "If the RC link is lost" in Home & aircraft. Luke plans for link loss at some landing zones (15 Oct 2026).

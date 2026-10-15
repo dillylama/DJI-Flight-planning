@@ -197,7 +197,7 @@ test('faults in the header, indices and actions are caught', () => {
   assert.deepEqual(both(x => x.replace('wpmz/1.0.6', 'wpmz/1.0.2')), ['V_HEADER']);
   assert.deepEqual(both(x => x.replace('<wpml:takeOffSecurityHeight>60<', '<wpml:takeOffSecurityHeight>0<')), ['V_HEADER']);
   assert.deepEqual(both(x => x.replace('<wpml:executeRCLostAction>goBack<', '<wpml:executeRCLostAction>carryOn<')), ['V_HEADER']);
-  assert.deepEqual(both(x => x.replace('<wpml:flyToWaylineMode>safely<', '<wpml:flyToWaylineMode>fast<')), ['V_HEADER']);
+  assert.deepEqual(both(x => x.replace(/<wpml:flyToWaylineMode>[a-zA-Z]+</, '<wpml:flyToWaylineMode>fast<')), ['V_HEADER']);
   assert.deepEqual(codesOf(T, Wl.replace('<wpml:finishAction>goHome<', '<wpml:finishAction>noAction<')), ['V_TEMPLATE']);
   assert.deepEqual(codesOf(T, nth(Wl, 'index', 3, () => '7')), ['V_INDEX']);
   assert.deepEqual(codesOf(T, Wl.slice(0, Wl.length - 400)), ['V_FORMAT']);

@@ -52,7 +52,7 @@ sampleTest('waylines.wpml reproduces the Pilot 2 sample field by field', () => {
 });
 
 sampleTest('template.kml header and heights match the sample (EGM96 height + ellipsoidHeight)', () => {
-  const t = writeWpml(sampleRoute(), { takeoff: { takeoffSecurityM: 60 } }).templateKml;
+  const t = writeWpml(sampleRoute(), { takeoff: { takeoffSecurityM: 60, flyToMode: 'safely' } }).templateKml;   // the Pilot 2 sample was exported with 'safely'
   const theirs = sample('template.kml');
   for (const tag of ['droneEnumValue', 'payloadEnumValue', 'payloadPositionIndex', 'heightMode', 'coordinateMode', 'templateType', 'flyToWaylineMode', 'executeRCLostAction']) {
     const get = (x: string) => x.match(new RegExp(`<wpml:${tag}>([^<]*)<`))![1];
