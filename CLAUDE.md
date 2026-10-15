@@ -204,5 +204,17 @@ DEM clip (AOI + buffer), offline basemap tiles.
   track vs each flight's own cloud: planner never below 320 m (lowest 319.8 within ±75 m); FH2 flew 42–50 m LOW under
   the line at the koppies (lowest 271 m) and 70 m low over ground 75 m beside it (248 m), confirmed against GLO-30.
   FH2's "global elevation data" under-reads the hills; that is where its time advantage came from.
+- **Mission checker (15 Oct 2026, core/check.ts, tools/check-kmz.ts, planner section "Check a mission file")**: any
+  DJI KMZ (Pilot 2, FlightHub 2, ours) read from waylines.wpml (heights WGS84 / EGM96 / relativeToStartPoint — the
+  last needs the take-off point: template takeOffRefPoint or the home position), every leg sampled against the DEM
+  under the line and over the ±corridor, reported against the planned AGL (G4 criterion: short = more than 10 m
+  under). "Export corrected KMZ" rebuilds the heights the planner's way (dense vertices every 50 m, corridor max with
+  the ext rule, thinning to 10 m, measured speed model), carries the file's recording/calibration/L3/photo/RC-lost
+  settings, writes our proven waypoint-template layout, and only downloads after verifyRouteFiles passes. "Export DSM
+  for Pilot 2" writes the DEM as an EPSG:4326 float GeoTIFF (geotiff-write.ts) with each cell the highest ground
+  within 75 m and WGS84 ellipsoidal heights, for Pilot 2's own terrain following (Mapping mission → Terrain Follow →
+  DSM file; DJI's built-in source is ASTER GDEM 30 m). Pilot 2's expected vertical datum is undocumented: the first
+  mission made from such a DSM must be checked here before it is flown. tools/implied-dem.ts showed what FH2
+  believed: 10–16 m HIGH on the flats, 12 m median / 42 m worst LOW on the koppie tops (a smoothed/coarse DEM).
 - RC-lost behaviour is a take-off option (`rcLost`: goBack = DJI RC-lost action, continue = WPML exitOnRCLost goContinue),
   planner "If the RC link is lost" in Home & aircraft. Luke plans for link loss at some landing zones (15 Oct 2026).
