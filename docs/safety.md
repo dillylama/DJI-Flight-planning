@@ -71,10 +71,20 @@ Real-Time Follow for that.
 
 `waypointSpeed` is the speed from that waypoint to the next (DJI WPML). In the default "follow
 terrain" profile each leg has a top speed from the climb / descent limits (4 / 3 m/s). A waypoint's
-speed is capped by its own leg, the leg before it, and the entry speed of the leg after it (braking
-at 2 m/s²), so the aircraft is never faster than a leg allows whether it changes speed after
-passing a waypoint or ramps towards the next one. A leg that would need less than 1 m/s is an error
-(`TOO_STEEP`).
+speed is capped by its own leg's limit, and by what can brake to the next leg's entry speed within the
+leg at 2 m/s². A leg that would need less than 1 m/s is an error (`TOO_STEEP`).
+
+**How the M400 actually changes speed (measured 14–15 Oct 2026, G4 and PT flights, 7 waypoints).** When
+the next target is lower, the aircraft brakes in the last ~10 m before the waypoint and arrives at the
+new speed: 10 → 2.9 m/s at the waypoint with 8.8 m/s still 10 m before it, i.e. at least 4 m/s². When the
+next target is higher, it holds the old speed to the waypoint and accelerates after it, reaching the new
+speed 10–20 m later. On a leg it is therefore never faster than that leg's own target. Until 15 Oct the
+planner assumed either reading could happen and also capped a leg by the leg before it and by the next
+leg's entry speed directly, which held a level leg before a steep descent to the steep leg's speed
+(Luke: "the terrain was level, you were not climbing or descending, but the speed was very slow"). The
+rule now uses the measured behaviour with a factor-two margin on the braking (2 m/s² against ≥ 4
+measured); the independent verifier applies the same two checks to the file: each leg's vertical rate at
+its own speed, and that every speed drop can be braked within the leg before it at 2 m/s².
 
 ## 3a. Waypoint thinning (added 14 Oct 2026)
 

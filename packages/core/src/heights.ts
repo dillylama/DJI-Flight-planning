@@ -95,11 +95,16 @@ export function applyHeights(plan: Plan, route: Route, elev: ElevFn): Route<Flig
     // brake to the next leg's entry speed before it gets there.
     const entry: number[] = new Array(n).fill(Infinity);
     for (let i = n - 2; i >= 0; i--) entry[i] = Math.min(lim[i], Math.sqrt(entry[i + 1] ** 2 + 2 * SAFETY.brakeMs2 * D[i]));
-    // WPML: waypoint i's speed is the target from i to i+1. Whether the aircraft changes speed after passing
-    // the waypoint or ramps towards the next one, it is never faster than a leg allows if each target is
-    // within the limit of its own leg, of the leg before it, and of the entry speed of the leg after it.
+    // WPML: waypoint i's speed is the target from i to i+1. Measured on the M400 (G4 and PT flights, 14–15 Oct
+    // 2026, docs/safety.md §3): when the next target is LOWER the aircraft brakes in the last ~10 m before the
+    // waypoint and arrives at the new speed (≥ 4 m/s²); when it is HIGHER it holds the old speed to the waypoint
+    // and accelerates after it. So on a leg the aircraft is never faster than that leg's own target. Each
+    // target is therefore capped by its own leg's limit, and by what can brake to the next leg's entry speed
+    // within the leg at brakeMs2 (2 m/s², half of what was measured). Until 15 Oct 2026 the leg before and
+    // the next leg's entry speed capped it directly, which held a level leg before a steep one to the steep
+    // leg's speed; the flights showed that is not how the aircraft flies.
     for (let i = 0; i < n; i++) {
-      const cap = Math.min(i < n - 1 ? lim[i] : Infinity, i > 0 ? lim[i - 1] : Infinity, i < n - 1 ? entry[i + 1] : Infinity);
+      const cap = Math.min(i < n - 1 ? lim[i] : Infinity, i < n - 1 ? Math.sqrt(entry[i + 1] ** 2 + 2 * SAFETY.brakeMs2 * D[i]) : Infinity);
       if (cap < speed[i]) { speed[i] = Math.max(o.minLegSpeedMs, cap); slowed[i] = true; }
     }
   }
@@ -108,8 +113,9 @@ export function applyHeights(plan: Plan, route: Route, elev: ElevFn): Route<Flig
   const damping = wps.map(w => w.dampingM);
   const rounding = wps.map(() => 0), turn = wps.map(() => 0), lag = wps.map(() => 0);
   const grad = D.map((d, i) => (d < 1e-6 ? 0 : (h[i + 1] - h[i]) / d));
-  // Highest / lowest speed the aircraft can have on leg i: its own target, or one it still carries from a neighbour.
-  const vHi = (i: number) => Math.max(speed[i], speed[i + 1], i > 0 ? speed[i - 1] : 0);
+  // Highest / lowest speed the aircraft can have on leg i (measured behaviour, see above): never above its own
+  // target; as low as the slower neighbour where it brakes before the next waypoint or accelerates after the last.
+  const vHi = (i: number) => speed[i];
   const vLo = (i: number) => Math.min(speed[i], speed[i + 1], i > 0 ? speed[i - 1] : Infinity);
   for (let i = 1; i < n - 1; i++) {
     if (D[i - 1] < 1e-6 || D[i] < 1e-6 || isStop(wps[i])) continue;   // the aircraft stops at a stop turn: nothing is rounded
