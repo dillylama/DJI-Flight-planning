@@ -44,8 +44,8 @@ export const DEFAULTS: PlanOptions = {
   fovDeg: 70,
   sidelapPct: 50,
   courseDeg: 0,
-  runInM: 150,
-  runOutM: 150,
+  runInM: 80,              // was 150 for the figure-8 era; must exceed the coordinated-turn radius v²/(g·tan bank) (81 m at 17 m/s, 28 m at 10 m/s)
+  runOutM: 80,
   wpSpacingM: 150,
   corridorM: 75,
   demSampleM: 30,
