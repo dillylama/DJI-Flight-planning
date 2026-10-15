@@ -30,7 +30,7 @@ const t0: number = rec.flight.start_time;
 interface S { t: number; lat: number; lon: number; alt: number; v: number; vz: number }
 const S: S[] = [];
 for (const f of rec.frameState) {
-  const fc = f.uav?.[0]?.fc?.[0]; if (!fc) continue;
+  const fc = f.uav?.[0]?.fc?.[0]; if (!fc?.location) continue;   // some frames carry no position (seen 15 Oct 2026)
   S.push({ t: (f.time - t0) / 1000, lat: fc.location.latitude, lon: fc.location.longitude, alt: fc.location.altitude, v: 0, vz: 0 });
 }
 for (let i = 1; i < S.length; i++) {

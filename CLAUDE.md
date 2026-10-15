@@ -90,6 +90,10 @@ DEM clip (AOI + buffer), offline basemap tiles.
   `C:\Claude\rtklib\`. G3: PPK − RTK 0.5 cm horizontal, 2.4 cm vertical. Ground points 15 Oct 2026
   (`tools/gcp-check.ts`): Terra RTK cloud +4 cm above the surveyed ground; Terra PPK clouds +0.9 m because Terra takes
   the base position from the RINEX header (single-point) → type the RTCM 1006 position into Terra's base dialog.
+  G5 (15 Oct, flown with NO corrections): our PPK 100 % fixed; Terra's header base was 10 m off; corrected cloud +7 cm
+  above the ground points → PPK without a correction link is production-ready. `tools/las-shift.ts` fixes a cloud
+  processed with a wrong base (rigid translation, header offsets only; use the cloud's own units: metres for UTM,
+  degrees when Terra wrote WGS 84).
 - G4 flown 14 Oct 2026 (valley at home, lines 240–446 m above home): file flown within −0.6…+0.3 m; the aircraft's own
   waypoint-mission limits are ≈3.7 m/s up / 2.6 m/s down (planner assumes 4 / 3: safe, costs time). Point-cloud DEM
   check: `node tools/cloud-vs-dem.ts cloud.las dem.tif route.kmz --utm 34S --every 4 --agl N` (Terra LAS 1.4 in

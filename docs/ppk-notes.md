@@ -100,6 +100,17 @@ median above the points; G4 cloud0 (Terra's base there was 1.36 m south and 0.96
 (+0.039, +1.360, −0.958) → **+5.6 cm** / +10.9 cm. Same as the RTK cloud. For a job, type the base position into Terra
 once and nothing needs shifting.
 
+## No-RTK flight (G5, 15 Oct 2026): PPK is production-ready
+
+The valley block was flown with corrections switched off (the aircraft on single GPS, MRK fix quality 0/16). Our
+chain: 3,028 epochs, 100 % fixed. Terra's PPK of the same data took the base position from the RINEX header, which on
+a no-RTK day was **10.2 m high and 5 m off** (single-point fix); corrected by that vector with `las-shift`, the cloud
+sits **+7.3 cm** (lowest) / +11.8 cm (median) above the nine surveyed points, the same as the RTK and corrected-PPK
+clouds of the other flights. So a job can be flown without any correction link and post-processed, provided the base
+position is typed into Terra (and the rover survey uses the same base position). Note Terra wrote this cloud in
+geographic degrees (WGS 84), not UTM: `cloud-vs-dem` and `gcp-check` handle both, `las-shift` takes the shift in the
+cloud's own units.
+
 ## To do
 
 - [ ] Field rule: fly RTK when corrections exist, log the RS4 always; PPK the photos as standard, point cloud via Terra PPK.
