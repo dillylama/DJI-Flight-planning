@@ -211,6 +211,14 @@ in the other; the planner's 20 m uncertainty allowance covers the worst of it wi
 on top of that kept the aircraft 13 m above plan at the tightest point. G4 passed. Rules for a job stand as written:
 GLO-30 with the 20 m allowance, never below 100 m AGL, obstacle survey done.
 
+**Breakpoint resume on the real aircraft (15 Oct 2026).** G3 block, RTH triggered by the pilot 41 % along line 3,
+battery swap, aircraft and RC powered off and on. Pilot 2 offered the breakpoint on restart; the aircraft flew to it
+at the line height (104 m above home), rejoined the same leg about 6 m before the stop point, ran no calibration
+passes there, and flew the remaining 30 waypoints to the end. The L3 recorded on both legs; photos on line 3 cover
+0–25 % from the first flight and 25–99 % from the second, no gap and no overlap. The resume survives a cold start.
+Mean ground speed on the route was 5.2 and 6.8 m/s against 6.0 and 7.7 m/s asked by the file over the same legs:
+the aircraft runs about 13 % under the file speeds between waypoints, on top of the planner's slowed legs.
+
 ## 6. What none of this covers
 
 1. **Obstacles that are not in the DEM**: masts, power lines, cranes, turbines, new buildings, trees

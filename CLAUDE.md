@@ -121,8 +121,12 @@ DEM clip (AOI + buffer), offline basemap tiles.
 - G1 result (13 Oct 2026, docs/wpml.md): Pilot 2 keeps positions, heights, speeds, turn modes, straight legs and
   record start/stop; it shortens executed damping to ⅓ leg ≤ 10 m, drops aircraftCalibration and the start group,
   and turns continuous shooting into takePhoto on distance. The writer now writes exactly that.
-- In flight the L3 shoots RGB every 2.0 s regardless (model colouring), ignoring our distance trigger (G3/G4, 14 Oct
-  2026; docs/wpml.md). Luke wants distance-based photos → test `modelColoringEnable 0` + distance takePhoto next.
+- L3 RGB photos: with model colouring ON the L3 shoots every 2.0 s and ignores the distance trigger (G3/G4, 14 Oct
+  2026); with colouring OFF the `takePhoto` distance trigger is honoured exactly (PT flight, 15 Oct 2026). Pending:
+  does Terra colour the cloud from those photos; if yes, the planner default becomes colouring off.
+- Breakpoint resume proven live 15 Oct 2026 (RTH mid-line, battery swap, aircraft + RC power cycle, continue from the
+  breakpoint): rejoined 6 m before the stop, no calibration passes at the rejoin, photos continuous across the break.
+- The aircraft flies ~13 % under the file's waypoint speeds on average (acceleration between waypoints).
 - Waypoint cap: 1,040 opened in Pilot 2 ("ok-ish"), 1,270 and 1,524 import and open but the map can no longer be panned
   or zoomed (14 Oct 2026), 2,013 crashed it → 1,000 per file stays (`M400_LIMITS.maxWaypoints`); thinning is the lever.
 - Corners between lines are DJI `coordinateTurn` (M400 simulator: 6–7 m/s through a 90° corner at 10 m/s, 4–6 m

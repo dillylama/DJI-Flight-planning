@@ -84,9 +84,13 @@ per-waypoint values would still be safe: `globalHeight` is the **highest** waypo
 of both cameras came exactly 2.00 s after the previous one (G4: 257 of 259 gaps at 2.0 s), whatever the speed: 3–5 m
 apart on the slowed legs, 20 m apart at 10 m/s. The `takePhoto` groups on `multipleDistance` (37.6 m on G4) left no
 trace. That is the L3's model-colouring capture (`modelColoringEnable 1`), which runs on its own clock while the point
-cloud records. Luke wants distance-based photos. Next test: a file with `modelColoringEnable 0` and the distance
-`takePhoto` groups, to see whether the L3 then honours the distance trigger and whether Terra still colours the
-cloud from those photos.
+cloud records. Luke wants distance-based photos.
+
+**Answered 15 Oct 2026: with `modelColoringEnable 0` the distance trigger is honoured.** Same block, `takePhoto` on
+`multipleDistance` 18.8 m per line: 24 photos per full line per camera, exactly one every 18.8 m, none on run-ins,
+turns or transit; 2.3 s apart at 8 m/s and 4.7 s on the slowed legs. So: colouring on = 2 s timer, colouring off =
+our distance trigger. Whether Terra still colours the cloud from these photos is being checked in Terra.
+The MRK still lacks the exposure time on about 60 % of its lines either way; the JPG XMP has every one.
 Only these spellings are verified. The writer refuses other return and scan modes until a sample shows them.
 
 ## Area-route extras (for reference)
