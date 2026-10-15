@@ -131,7 +131,7 @@ function groupsXml(groups: Group[] | undefined, nextId: { v: number }, ind: stri
 const missionConfig = (tk: TakeoffOptions, pos: number) => `    <wpml:missionConfig>
       <wpml:flyToWaylineMode>${tk.flyToMode}</wpml:flyToWaylineMode>
       <wpml:finishAction>goHome</wpml:finishAction>
-      <wpml:exitOnRCLost>executeLostAction</wpml:exitOnRCLost>
+      <wpml:exitOnRCLost>${tk.rcLost === 'continue' ? 'goContinue' : 'executeLostAction'}</wpml:exitOnRCLost>
       <wpml:executeRCLostAction>goBack</wpml:executeRCLostAction>
       <wpml:takeOffSecurityHeight>${f(tk.takeoffSecurityM, 2)}</wpml:takeOffSecurityHeight>
       <wpml:globalTransitionalSpeed>${fDown(tk.transitSpeedMs)}</wpml:globalTransitionalSpeed>

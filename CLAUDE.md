@@ -193,3 +193,5 @@ DEM clip (AOI + buffer), offline basemap tiles.
 ## Progress tracker
 - docs/progress.html is the project timeline/gates page, published as an artifact (URL in memory). Update it and
   republish at every milestone; commit docs-only changes straight to main.
+- RC-lost behaviour is a take-off option (`rcLost`: goBack = DJI RC-lost action, continue = WPML exitOnRCLost goContinue),
+  planner "If the RC link is lost" in Home & aircraft. Luke plans for link loss at some landing zones (15 Oct 2026).

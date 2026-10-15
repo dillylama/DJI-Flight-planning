@@ -19,6 +19,9 @@ export interface TakeoffOptions {
   transitSpeedMs: number;     // DJI globalTransitionalSpeed
   rthHeightM: number | null;  // above take-off; null = use the recommended value
   minClearanceM: number;      // required terrain clearance on transit and RTH legs
+  // What the aircraft does when the RC link is lost during the route: 'goBack' = DJI's RC-lost action (RTH);
+  // 'continue' = carry on with the route (WPML exitOnRCLost goContinue), for sites where link loss is expected.
+  rcLost: 'goBack' | 'continue';
 }
 
 export const TAKEOFF_DEFAULTS: TakeoffOptions = {
@@ -27,6 +30,7 @@ export const TAKEOFF_DEFAULTS: TakeoffOptions = {
   transitSpeedMs: 15,
   rthHeightM: null,
   minClearanceM: 60,
+  rcLost: 'goBack',
 };
 
 export interface Pt3 { lon: number; lat: number; h: number }
