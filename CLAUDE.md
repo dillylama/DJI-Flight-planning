@@ -127,6 +127,12 @@ DEM clip (AOI + buffer), offline basemap tiles.
 - Breakpoint resume proven live 15 Oct 2026 (RTH mid-line, battery swap, aircraft + RC power cycle, continue from the
   breakpoint): rejoined 6 m before the stop, no calibration passes at the rejoin, photos continuous across the break.
 - The aircraft flies ~13 % under the file's waypoint speeds on average (acceleration between waypoints).
+- **Speed rule changed 15 Oct 2026 (docs/safety.md §3)**: measured on G4/PT, the M400 brakes to a lower target in
+  the last ~10 m BEFORE the waypoint (≥ 4 m/s²) and accelerates to a higher one AFTER it, so on a leg it is never
+  faster than that leg's own target. A waypoint speed is now capped by its own leg's limit and by what can brake to
+  the next leg's entry speed within the leg at 2 m/s² (no longer by the leg before or the next entry speed directly,
+  which held level legs before steep ones to the steep speed). validate.ts, verify.ts (`V_BRAKE`, `brakeMs2`
+  option) and the mutation list (M8/M9) follow the same model. G3 block: 13 → 5 slowed legs, lines 9.2 → 8.1 min.
 - Waypoint cap: 1,040 opened in Pilot 2 ("ok-ish"), 1,270 and 1,524 import and open but the map can no longer be panned
   or zoomed (14 Oct 2026), 2,013 crashed it → 1,000 per file stays (`M400_LIMITS.maxWaypoints`); thinning is the lever.
 - Corners between lines are DJI `coordinateTurn` (M400 simulator: 6–7 m/s through a 90° corner at 10 m/s, 4–6 m

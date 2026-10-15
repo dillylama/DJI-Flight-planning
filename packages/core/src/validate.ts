@@ -69,13 +69,16 @@ export function validate(plan: Plan, route: Route<FlightWp>, opts: ValidateOptio
 
   if (o.verticalMode === 'slow') {
     // Terrain-following: slowed legs are expected. A leg is a problem when even the speed floor is too fast
-    // for it. Checked at the fastest speed the aircraft can have on the leg: its own target, or a neighbour's.
+    // for it. Checked at the leg's own target (the aircraft is never faster than that on the leg: it brakes to
+    // a slower target before the waypoint and accelerates to a faster one after it; docs/safety.md §3), and
+    // at the speed it would still carry in if the leg before is too short to brake at brakeMs2.
     const steep: number[] = [];
     for (let i = 0; i < wps.length - 1; i++) {
       const d = dist(wps[i].xy, wps[i + 1].xy), dh = wps[i + 1].h - wps[i].h;
       if (d < SAFETY.minLegM || dh === 0) continue;                  // duplicate waypoints are reported above
-      const v = Math.max(wps[i].speed, wps[i + 1].speed, i > 0 ? wps[i - 1].speed : 0);
-      if ((Math.abs(dh) / d) * v > (dh > 0 ? o.climbMs : o.descentMs) * (1 + 1e-9)) steep.push(i);
+      let v = wps[i].speed;
+      if (i > 0 && wps[i - 1].speed > v) v = Math.max(v, Math.sqrt(Math.max(0, wps[i - 1].speed ** 2 - 2 * SAFETY.brakeMs2 * dist(wps[i - 1].xy, wps[i].xy))));
+      if ((Math.abs(dh) / d) * v > (dh > 0 ? o.climbMs : o.descentMs) * (1 + 1e-6)) steep.push(i);
     }
     if (steep.length) issues.push({ severity: 'error', code: 'TOO_STEEP', message: `${steep.length} leg(s) would need less than ${o.minLegSpeedMs} m/s to stay within the ${o.climbMs} / ${o.descentMs} m/s climb/descent limits: the terrain step is too sharp for this waypoint spacing. Raise AGL there, tighten waypoint spacing, or fly lines along the slope.`, wps: steep });
     const slowed = wps.filter((w, i) => i < wps.length - 1 && w.slowed).length;

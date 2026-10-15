@@ -930,7 +930,7 @@ function buildRouteFiles(r: Result): Verified {
     const report = verifyRouteFiles(files.templateKml, files.waylinesWpml, {
       elev: state.dem!.elev, aglM: o.aglM, corridorM: o.corridorM, lidar: true,
       maxClimbMs: slow ? o.climbMs : M400_LIMITS.climbMaxMs, maxDescentMs: slow ? o.descentMs : M400_LIMITS.descentMaxMs,
-      maxSpeedMs: M400_LIMITS.lineSpeedMaxMs, vertAccelMs2: SAFETY.vertAccelMs2,
+      maxSpeedMs: M400_LIMITS.lineSpeedMaxMs, vertAccelMs2: SAFETY.vertAccelMs2, brakeMs2: SAFETY.brakeMs2,
     });
     const t = so.transit;
     const tags = t ? `_RTH${t.rthHeightM.toFixed(0)}_ALT${maxAltSetting(t)}` : '';

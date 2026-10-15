@@ -32,22 +32,25 @@ test('slow mode: AGL stays nominal on the flat and legs onto the ridge are slowe
   assert.ok(st.flightMin > uniform);
 });
 
-// Fly the route the way the aircraft could: on each leg it moves from the speed it arrives with towards the
-// leg's target, braking no harder than `a`. Returns the worst vertical rate over its limit on any leg.
-function simulate(wps: { xy: [number, number]; h: number; speed: number }[], a: number, climb: number, descent: number, instant = false): number {
-  let u = 0, worst = -Infinity;
+// Fly the route the way the M400 was measured to (G4 and PT flights, 14–15 Oct 2026): on a leg it is never
+// faster than the leg's own target; it brakes to a lower next target before the waypoint, decelerating at `a`
+// (the flights showed ≥ 4 m/s²; the planner trusts 2), so a target it cannot brake from in time overshoots into
+// the next leg. Returns the worst vertical rate over its limit on any leg.
+function simulate(wps: { xy: [number, number]; h: number; speed: number }[], a: number, climb: number, descent: number): number {
+  let worst = -Infinity;
   for (let i = 0; i < wps.length - 1; i++) {
     const d = dist(wps[i].xy, wps[i + 1].xy), dh = wps[i + 1].h - wps[i].h, v = wps[i].speed;
     if (d < 1e-6) continue;
-    const vEnd = instant ? v : u > v ? Math.max(v, Math.sqrt(Math.max(0, u * u - 2 * a * d))) : v;
-    const vMax = instant ? v : Math.max(u, v);
+    // speed carried into this leg: the previous target if it could not brake to v within the previous leg
+    let vIn = v;
+    if (i > 0) { const u = wps[i - 1].speed, dp = dist(wps[i - 1].xy, wps[i].xy); if (u > v) vIn = Math.max(v, Math.sqrt(Math.max(0, u * u - 2 * a * dp))); }
+    const vMax = Math.max(v, vIn);
     if (dh !== 0) worst = Math.max(worst, (Math.abs(dh) / d) * vMax - (dh > 0 ? climb : descent));
-    u = vEnd;
   }
   return worst;
 }
 
-test('slow mode: never faster than a leg allows, however the aircraft changes speed between waypoints', () => {
+test('slow mode: never faster than a leg allows, flown the way the aircraft was measured to change speed', () => {
   const steps = (lon: number, lat: number) => {
     const x = (lon - lon0) / m * k, y = (lat - lat0) / m;
     return 300 + 180 * Math.sin(x / 140) + 120 * Math.cos(y / 90) + (Math.abs(x - 400) < 60 ? 250 : 0);
@@ -57,21 +60,17 @@ test('slow mode: never faster than a leg allows, however the aircraft changes sp
     const f = applyHeights(plan, buildRoute(plan), steps);
     const tooSteep = validate(plan, f).some(i => i.code === 'TOO_STEEP');
     const w = f.wps;
-    // reading 1: the speed changes after passing the waypoint, braking at 2 m/s² (the assumed minimum)
-    const afterWp = simulate(w, 2, 4, 3);
-    // reading 2: the aircraft ramps between the two waypoint speeds along the leg
-    let ramp = -Infinity;
-    for (let i = 0; i < w.length - 1; i++) {
-      const d = dist(w[i].xy, w[i + 1].xy), dh = w[i + 1].h - w[i].h;
-      if (d > 1e-6 && dh !== 0) ramp = Math.max(ramp, (Math.abs(dh) / d) * Math.max(w[i].speed, w[i + 1].speed) - (dh > 0 ? 4 : 3));
-    }
+    const measured = simulate(w, 2, 4, 3);
     assert.ok(w.some(p => p.slowed), `spacing ${wpSpacingM}: some legs slowed`);
-    if (!tooSteep) {
-      assert.ok(afterWp <= 1e-6, `spacing ${wpSpacingM}: ${afterWp.toFixed(3)} m/s over the limit when braking after the waypoint`);
-      assert.ok(ramp <= 1e-6, `spacing ${wpSpacingM}: ${ramp.toFixed(3)} m/s over the limit when ramping`);
+    if (!tooSteep) assert.ok(measured <= 1e-6, `spacing ${wpSpacingM}: ${measured.toFixed(3)} m/s over the limit`);
+    // and the route is flagged whenever a limit cannot be met
+    assert.equal(tooSteep, measured > 1e-6, `spacing ${wpSpacingM}: TOO_STEEP must match the limits`);
+    // a level leg before a steep one is NOT held to the steep leg's speed when it is long enough to brake in
+    for (let i = 1; i < w.length - 1; i++) {
+      const dPrev = dist(w[i - 1].xy, w[i].xy), dhPrev = w[i].h - w[i - 1].h;
+      if (Math.abs(dhPrev) < 1e-6 && dPrev >= 100 && w[i].speed < 6 && w[i - 1].role === 'line' && w[i].role === 'line')
+        assert.ok(w[i - 1].speed > w[i].speed + 1, `spacing ${wpSpacingM}: level ${dPrev.toFixed(0)} m leg before wp ${i + 1} held to ${w[i - 1].speed.toFixed(1)} m/s`);
     }
-    // and the route is flagged whenever either reading breaks a limit
-    assert.equal(tooSteep, afterWp > 1e-6 || ramp > 1e-6 || simulate(w, 2, 4, 3, true) > 1e-6, `spacing ${wpSpacingM}: TOO_STEEP must match the limits`);
   }
 });
 
@@ -174,4 +173,24 @@ test('overlap bands between consecutive lines: flat ground gives the planned sid
     assert.ok(Math.abs(o.widthMinM - plan.swath / 2) < 1e-6);
     assert.ok(o.poly.length >= 4);
   }
+});
+
+test('a fast flat leg before a steep one is held to what can brake into it at 2 m/s², and no faster', () => {
+  // flat, then a 1:3 descent for 300 m, then flat again: the descent legs are limited to 9 m/s (3 m/s ÷ 1/3)
+  const ramp = (lon: number, lat: number) => { const x = (lon - lon0) / m * k; return 300 - Math.max(0, Math.min(300, x)) / 3; };
+  const plan = planLines(poly, { aglM: 150, speedMs: 17, courseDeg: 90, wpSpacingM: 30, corridorM: 30, runInM: 100, runOutM: 100, climbMs: 4, descentMs: 3, thinToleranceM: 0 });
+  const f = applyHeights(plan, buildRoute(plan, { fig8: false }), ramp);
+  assert.ok(!validate(plan, f).some(i => i.code === 'TOO_STEEP'), 'a 1:3 slope is flyable at 9 m/s');
+  assert.ok(simulate(f.wps, 2, 4, 3) <= 1e-6, 'never over the limits when braking at 2 m/s²');
+  const w = f.wps;
+  let checked = 0;
+  for (let i = 1; i < w.length - 1; i++) {
+    const d = dist(w[i - 1].xy, w[i].xy), dhPrev = w[i].h - w[i - 1].h, dhNext = w[i + 1].h - w[i].h;
+    if (Math.abs(dhPrev) > 1 || dhNext >= -5 || w[i].speed > 9.5) continue;   // (near) flat leg into a descent leg slowed to ~9 m/s
+    const allowed = Math.sqrt(w[i].speed ** 2 + 2 * 2 * d);
+    assert.ok(w[i - 1].speed <= allowed + 1e-6, `wp ${i}: ${w[i - 1].speed.toFixed(2)} m/s on a ${d.toFixed(0)} m flat leg cannot brake to ${w[i].speed.toFixed(2)} m/s at 2 m/s²`);
+    assert.ok(w[i - 1].speed >= Math.min(17, allowed) - 0.5, `wp ${i}: flat leg held to ${w[i - 1].speed.toFixed(2)} m/s, could be ${Math.min(17, allowed).toFixed(2)}`);
+    checked++;
+  }
+  assert.ok(checked >= 2, `${checked} flat-into-descent waypoints found`);
 });

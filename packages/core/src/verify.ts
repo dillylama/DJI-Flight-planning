@@ -133,6 +133,7 @@ export interface VerifyOptions {
   lidar: boolean;          // expect one startRecord and, later, one stopRecord, each on a stop-turn waypoint
   tolM?: number;           // numerical tolerance on heights (default 0.05 m)
   vertAccelMs2?: number;   // vertical acceleration assumed for the pull-up allowance (default 2 m/s²)
+  brakeMs2?: number;       // horizontal deceleration the aircraft is trusted with before a slower leg (default 2 m/s²; ≥ 4 measured)
 }
 
 export interface VerifyReport {
@@ -241,13 +242,20 @@ export function verifyRouteFiles(templateKml: string, waylinesWpml: string, opts
     if (L < 2) { err('V_LEG', `Leg ${i + 1} is only ${L.toFixed(2)} m long (duplicate waypoints).`, [i]); continue; }
     const da = STOP_MODES.includes(a.turnMode) ? 0 : a.damping, db = STOP_MODES.includes(b.turnMode) ? 0 : b.damping;
     if (da + db >= Math.hypot(L, dh)) err('V_DAMPING', `Leg ${i + 1}: turn damping ${da} + ${db} m is not shorter than the ${Math.hypot(L, dh).toFixed(1)} m leg.`, [i]);
-    // Vertical rate at the fastest speed the aircraft can have on this leg: its own, the one it arrives
-    // with from the leg before, or the one it ramps towards for the leg after.
-    const v = Math.max(a.speed, b.speed, i > 0 ? P[i - 1].speed : 0), rate = (dh / L) * v;
+    // Vertical rate at the leg's own speed. Measured on the M400 (14–15 Oct 2026, docs/safety.md §3): the
+    // aircraft brakes to a lower target before the waypoint and accelerates to a higher one after it, so on
+    // a leg it is never faster than that leg's own target. The second check is that every speed drop can be
+    // braked within the leg before it at brakeMs2 (2 m/s², half of what was measured).
+    const v = a.speed, rate = (dh / L) * v;
     if (rate > report.maxClimbMs) report.maxClimbMs = rate;
     if (-rate > report.maxDescentMs) report.maxDescentMs = -rate;
     if (rate > opts.maxClimbMs + 0.01) err('V_CLIMB', `Leg ${i + 1} demands a ${rate.toFixed(2)} m/s climb (limit ${opts.maxClimbMs}).`, [i]);
     if (-rate > opts.maxDescentMs + 0.01) err('V_DESCENT', `Leg ${i + 1} demands a ${(-rate).toFixed(2)} m/s descent (limit ${opts.maxDescentMs}).`, [i]);
+    if (i > 0 && !STOP_MODES.includes(a.turnMode)) {   // at a stop turn the aircraft stops anyway
+      const vPrev = P[i - 1].speed, brake = opts.brakeMs2 ?? 2;
+      if (vPrev > v && vPrev * vPrev - v * v > 2 * brake * legLen[i - 1] * 1.02 + 0.5)   // 2 % + 0.5 m²/s² for the two distance models
+        err('V_BRAKE', `Leg ${i + 1} starts at ${v} m/s but the leg before it is flown at ${vPrev} m/s and is only ${legLen[i - 1].toFixed(0)} m long: cannot brake at ${brake} m/s².`, [i - 1, i]);
+    }
 
     // Terrain under the leg and around both of its ends: stations along the leg and `half` beyond each
     // waypoint (where the turn is flown), each with offsets across the corridor.
@@ -277,7 +285,8 @@ export function verifyRouteFiles(templateKml: string, waylinesWpml: string, opts
 
   // ── what the aircraft does at each fly-through waypoint, from the written damping, heights and speeds
   const accel = opts.vertAccelMs2 ?? 2;
-  const vHi = (j: number) => Math.max(P[j].speed, P[j + 1].speed, j > 0 ? P[j - 1].speed : 0);
+  // never faster than the leg's own target on a leg (measured, docs/safety.md §3); as slow as the slower neighbour
+  const vHi = (j: number) => P[j].speed;
   const vLo = (j: number) => Math.min(P[j].speed, P[j + 1].speed, j > 0 ? P[j - 1].speed : Infinity);
   for (let i = 1; i < n - 1; i++) {
     if (STOP_MODES.includes(P[i].turnMode) || legLen[i - 1] < 2 || legLen[i] < 2) continue;
