@@ -85,7 +85,9 @@ DEM clip (AOI + buffer), offline basemap tiles.
   (its 1006 position, without antenna height, is what the aircraft used), `.MRK` = per-photo RTK position + offsets,
   JPG XMP `UTCAtExposure` = GPST. Tools: `trim-rinex.ts`, `rtb-base.ts`, `ppk-drone.conf` (rnx2rtkp -k; L1+L2+L5 →
   100 % fixed), `ppk-cameras.ts` (PPK − MRK check, camera CSV, recovers photos missing from the MRK). RTKLIB demo5 in
-  `C:\Claude\rtklib\`. G3: PPK − RTK 0.5 cm horizontal, 2.4 cm vertical.
+  `C:\Claude\rtklib\`. G3: PPK − RTK 0.5 cm horizontal, 2.4 cm vertical. Ground points 15 Oct 2026
+  (`tools/gcp-check.ts`): Terra RTK cloud +4 cm above the surveyed ground; Terra PPK clouds +0.9 m because Terra takes
+  the base position from the RINEX header (single-point) → type the RTCM 1006 position into Terra's base dialog.
 - G4 flown 14 Oct 2026 (valley at home, lines 240–446 m above home): file flown within −0.6…+0.3 m; the aircraft's own
   waypoint-mission limits are ≈3.7 m/s up / 2.6 m/s down (planner assumes 4 / 3: safe, costs time). Point-cloud DEM
   check: `node tools/cloud-vs-dem.ts cloud.las dem.tif route.kmz --utm 34S --every 4 --agl N` (Terra LAS 1.4 in

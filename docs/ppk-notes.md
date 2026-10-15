@@ -69,6 +69,30 @@ and one stage-1 wind warning; neither affected the fix.
 6. Point cloud: DJI Terra with the base RINEX for a PPK trajectory (not yet tried; DJI's L1/L2 workflow puts the base
    `.obs` in the mission folder).
 
+## Ground points, 15 Oct 2026: Terra's PPK takes the base position from the RINEX header, and that is 0.85 m off
+
+Nine points surveyed with the RS4 rover (RTK fixed, 1–2 cm) on bare ground on the G3 block, checked against the
+clouds with `node tools/gcp-check.ts` (cloud points within 1 m of each point):
+
+| Cloud | Trajectory | Cloud lowest − point | Cloud median − point |
+|---|---|---|---|
+| G3 (14 Oct) | Terra, aircraft RTK | +4.0 cm (1.9…6.6) | +8.2 cm |
+| PT cloud0 (15 Oct) | Terra PPK against the RS4 log | **+87.5 cm** (86.0…89.3) | +92.4 cm |
+| G4 (14 Oct) | Terra PPK against the RS4 log | **+99.4 cm** (96.2…101.9) | +104.8 cm |
+
+The RTK cloud sits 4 cm above the pole tips: as good as it gets. Both PPK clouds sit about 0.9 m too high, by a
+constant. Cause, from Terra's own `processing/intermediate/ppk_list.json`: the base position it used for the PT run
+is `4947334.3381 2008940.7522 -3477960.3590`, which is the **APPROX POSITION line of the RS4's RINEX header**, the
+receiver's single-point fix. Against the true reference point (RTCM 1006, what the aircraft used in flight) that is
+0.33 m west, 0.14 m north and **0.85 m up**. Every point of the cloud moves with it. GLO-30 sits 2.1 m above these
+points (1.6…2.6), consistent with the earlier cloud-vs-DEM figures.
+
+**Fix:** in Terra's base-station dialog type the 1006 position (`node tools/rtb-base.ts file.RTB --geodetic`):
+for the home base that is −33.25422975, 22.10036736, 708.561 m ellipsoidal, antenna height 0 (the 1006 position
+already is the phase-centre reference the aircraft used). Then reprocess. Our own RTKLIB chain uses that position
+and agreed with the aircraft's RTK to 2–5 cm, so the same should follow in Terra. The same base coordinates must be
+used for the RS4 rover survey (they were: the rover worked against the base's broadcast position).
+
 ## To do
 
 - [ ] Field rule: fly RTK when corrections exist, log the RS4 always; PPK the photos as standard, point cloud via Terra PPK.
