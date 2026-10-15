@@ -47,10 +47,11 @@ export interface BuildOptions {
   // the corner with 20 m damping; 'pass' (fly-through on straight legs) slowed to 3 m/s and pivoted at the
   // corner whatever the damping. Line waypoints stay fly-through, so the legs are straight.
   cornerMode?: 'pass' | 'coordinate';
+  endRunOut?: boolean;     // fly a run-out after the last line even without a figure-8 (legacy layout; default false)
 }
 
 // Full job, a resume from any line, or one sortie (a line range).
-export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true, fig8End, startLine, endLine, transit = null, cornerMode = 'coordinate' }: BuildOptions = {}): Route {
+export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true, fig8End, startLine, endLine, transit = null, cornerMode = 'coordinate', endRunOut = false }: BuildOptions = {}): Route {
   const { o, d, c, lines } = plan;
   const v = speedMs || o.speedMs;
   const endEight = fig8End ?? fig8;
@@ -111,7 +112,9 @@ export function buildRoute(plan: Plan, { fromLine = 0, speedMs, fig8 = true, fig
     // spot; the run-out beyond `b` still carries the aircraft across the whole strip.
     const nSeg = Math.abs(b - a) < 20 ? 0 : Math.max(1, Math.ceil(Math.abs(b - a) / o.wpSpacingM));
     for (let k = 0; k <= nSeg; k++) push(toXY(nSeg ? a + ((b - a) * k) / nSeg : a, L.v), 'line', { line: i });
-    push(toXY(b + s * runOut, L.v), 'runout', { line: i });
+    // The run-out after the LAST line is only flown when a figure-8 follows it (or when asked): recording stops at
+    // the block edge and there is no turn to make, so the route ends on the line (Luke, 15 Oct 2026).
+    if (i < lastIdx || endEight || endRunOut) push(toXY(b + s * runOut, L.v), 'runout', { line: i });
   }
 
   // End: figure-8 one radius beyond the run-out end, then an exit point where recording stops, so the
