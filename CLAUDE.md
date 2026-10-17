@@ -216,12 +216,12 @@ DEM clip (AOI + buffer), offline basemap tiles.
   DSM file; DJI's built-in source is ASTER GDEM 30 m). Pilot 2's expected vertical datum is undocumented: the first
   mission made from such a DSM must be checked here before it is flown. tools/implied-dem.ts showed what FH2
   believed: 10–16 m HIGH on the flats, 12 m median / 42 m worst LOW on the koppie tops (a smoothed/coarse DEM).
-- **Home DSM test (17 Oct 2026, samples/home-dsm/RESULT-2026-10-17.txt)**: Pilot 2 mapping missions at 300 m AGL on
-  DJI's ASTER data vs DSMs exported by the planner. DJI data: 45 m low under the line, 74 m low 75 m beside it (as
-  FH2). DSM A (max within 75 m, ellipsoidal): never below 301 m under the line. Pilot 2 reads DSM numbers as
-  ELLIPSOIDAL whatever the vertical tag (the MSL file flew 30 m low); tags are irrelevant. Pilot 2 still dips up to
-  15 m below surface + AGL at peaks and sits up to 45 m above elsewhere → export the DSM with ~20 m margin. Pilot 2
+- **Home DSM test (17 Oct 2026, samples/home-dsm/RESULT-2026-10-17.txt)**: Pilot 2 mapping missions on DJI's ASTER
+  data (300 m AGL) vs DSMs exported by the planner (320 m). DJI data: 45 m low under the line, 74 m low 75 m beside
+  it (as FH2). DSM A/C (max within 75 m, ellipsoidal): 10–19 m low under the line at the worst point, 33–35 m below
+  surface + AGL where Pilot 2 smooths over a peak. Pilot 2 reads DSM numbers as ELLIPSOIDAL whatever the vertical
+  tag (the MSL file flew 30 m low); tags are irrelevant. → export the DSM with a 40 m margin. Pilot 2
   "efficiency" mode = no stops, 18–21 s turns, 14.9 m/s (normal mode: 2–6 stops, 33–110 s turns). Open-site
-  workflow: Pilot 2 + efficiency mode + planner DSM (max 75 m + 20 m, ellipsoidal) + the mission checker.
+  workflow: Pilot 2 + efficiency mode + planner DSM (max 75 m + 40 m, ellipsoidal) + the mission checker.
 - RC-lost behaviour is a take-off option (`rcLost`: goBack = DJI RC-lost action, continue = WPML exitOnRCLost goContinue),
   planner "If the RC link is lost" in Home & aircraft. Luke plans for link loss at some landing zones (15 Oct 2026).

@@ -249,10 +249,10 @@ the same route with this planner's heights and speed rule, through the same writ
 our own files; it never downloads a file that failed the check. "Export DSM for Pilot 2" gives DJI's own terrain
 following a surface built from our DEM with the corridor rule folded in (highest ground within 75 m of each cell);
 the mission Pilot 2 builds on it must come back through the checker before it is flown. Measured 17 Oct 2026 (home
-block, 300 m AGL): Pilot 2 reads the DSM's numbers as WGS84 ellipsoidal heights whatever the file's vertical tag (a
-file with heights above sea level flew 30 m low), holds the planned height over the ground under the line on a
-75 m-dilated DSM (lowest 301 m), but dips up to 15 m below surface + AGL where it smooths over a peak: export the
-DSM with a 20 m margin. On DJI's own ASTER data the same mission flew 255 m under the line and 226 m beside it.
+block): Pilot 2 reads the DSM's numbers as WGS84 ellipsoidal heights whatever the file's vertical tag (a file with
+heights above sea level flew 30 m low); on a 75 m-dilated DSM at a planned 320 m it came down to 301 m over the
+ground under the line and 33–35 m below surface + AGL where it smooths over a peak: export the DSM with a 40 m
+margin. On DJI's own ASTER data at 300 m the same block was flown at 255 m under the line and 226 m beside it.
 
 ## 6. What none of this covers
 
