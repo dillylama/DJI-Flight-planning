@@ -194,7 +194,7 @@ let basemap: string = (() => { try { const v = localStorage.getItem(BASEMAP_STOR
 const app = document.getElementById('app')!;
 app.innerHTML = `
 <header>
-  <div class="brand"><span class="mark">3DM</span> Planner <span class="sub">M400 · Zenmuse L3 / P1</span></div>
+  <div class="brand"><span class="mark">3DM</span> Mission Checker <span class="sub">M400 · Zenmuse L3 · Pilot 2 / FlightHub 2 routes against the terrain</span></div>
   <div class="blockname" id="blockName">No block loaded</div>
   <div class="head-actions">
     <button id="exportJson" class="ghost" disabled${btnTip('exportJson')}>Export mission.json</button>
@@ -204,12 +204,20 @@ app.innerHTML = `
 </header>
 <aside>
   <section>
-    <h2>Block</h2>
-    <label class="drop"><input type="file" id="fileBlock" accept=".kmz,.kml" hidden />
-      <strong>Drop KMZ / KML</strong><span>or click to choose. Largest polygon is used.</span></label>
-    <div class="row"><button id="drawBlock" class="ghost" title="Draw the block on the map: click each corner, double-click or Enter to finish, Esc to cancel">Draw block</button><button id="editBlock" class="ghost" disabled title="Drag the corners of the block">Edit corners</button><button id="zoomBlock" class="ghost" disabled>Zoom to block</button></div>
-    <div class="row"><button id="clearMission" class="ghost" disabled>Clear mission</button><button id="loadDemo" class="link">Demo block</button></div>
-    <div class="note" id="blockInfo"></div>
+    <h2>Check a mission file ${ti('check')}</h2>
+    <label class="drop small"><input type="file" id="fileCheck" accept=".kmz" hidden />
+      <span>Drop a Pilot 2 / FlightHub 2 / planner KMZ to measure it against the terrain</span></label>
+    <div class="fields" style="margin-top:8px">
+      <label><span class="lt">Planned AGL <em>m</em>${ti('chkAgl')}</span><input type="number" id="chkAgl" step="10" min="30" max="1500" /></label>
+      <label><span class="lt">Corridor <em>± m</em>${ti('chkCorr')}</span><input type="number" id="chkCorr" step="5" min="0" max="300" /></label>
+    </div>
+    <div class="row"><button id="chkFetch" class="ghost" disabled${btnTip('chkFetch')}>Fetch GLO-30 around this mission</button></div>
+    <div class="note" id="chkInfo">No mission file loaded. Drop a KMZ exported from Pilot 2 or FlightHub 2 (route library → export), or one made here.</div>
+    <div class="issues" id="chkLegs"></div>
+    <div class="row"><button id="chkLift" class="ghost" disabled${btnTip('chkLift')}>Export corrected KMZ</button><button id="chkClear" class="link" hidden>Clear</button></div>
+    <div class="row" style="margin-top:8px"><select id="dsmDilate" title="How the DEM is turned into the surface DJI follows"><option value="75">DSM: highest ground within 75 m</option><option value="30">DSM: highest ground within 30 m</option><option value="0">DSM: bare DEM</option></select>
+      <select id="dsmMargin" title="Margin added to every cell: Pilot 2 smooths its route and came down 35 m below surface + AGL over peaks (17 Oct 2026)"><option value="40">+ 40 m margin</option><option value="20">+ 20 m</option><option value="0">no margin</option></select>
+      <button id="dsmBtn" class="ghost" disabled${btnTip('dsmBtn')}>Export DSM for Pilot 2</button></div>
   </section>
   <section>
     <h2>Terrain</h2>
@@ -222,6 +230,15 @@ app.innerHTML = `
     <label class="lbl" for="demDatum" style="margin-top:8px">Heights in a dropped GeoTIFF are ${ti('demDatum')}</label>
     <select id="demDatum"><option value="orthometric">above mean sea level (EGM96 / EGM2008 / local)</option><option value="ellipsoidal">ellipsoidal (WGS84), e.g. from PPK or LiDAR</option></select>
     <div class="note" id="demInfo"></div>
+  </section>
+  <details class="adv planner" id="plannerAdv"><summary>Plan a route here (steep sites; the Pilot 2 route with a DSM is the normal way)</summary>
+  <section>
+    <h2>Block</h2>
+    <label class="drop"><input type="file" id="fileBlock" accept=".kmz,.kml" hidden />
+      <strong>Drop KMZ / KML</strong><span>or click to choose. Largest polygon is used.</span></label>
+    <div class="row"><button id="drawBlock" class="ghost" title="Draw the block on the map: click each corner, double-click or Enter to finish, Esc to cancel">Draw block</button><button id="editBlock" class="ghost" disabled title="Drag the corners of the block">Edit corners</button><button id="zoomBlock" class="ghost" disabled>Zoom to block</button></div>
+    <div class="row"><button id="clearMission" class="ghost" disabled>Clear mission</button><button id="loadDemo" class="link">Demo block</button></div>
+    <div class="note" id="blockInfo"></div>
   </section>
   <section>
     <h2>Sensor ${ti('sensor')}</h2>
@@ -296,21 +313,6 @@ app.innerHTML = `
     <div class="note">For a new landing zone, or when Pilot 2's own breakpoint cannot be used. Set the new home first.</div>
   </section>
   <section>
-    <h2>Check a mission file ${ti('check')}</h2>
-    <label class="drop small"><input type="file" id="fileCheck" accept=".kmz" hidden />
-      <span>Drop a Pilot 2 / FlightHub 2 / planner KMZ to measure it against the terrain</span></label>
-    <div class="fields" style="margin-top:8px">
-      <label><span class="lt">Planned AGL <em>m</em>${ti('chkAgl')}</span><input type="number" id="chkAgl" step="10" min="30" max="1500" /></label>
-      <label><span class="lt">Corridor <em>± m</em>${ti('chkCorr')}</span><input type="number" id="chkCorr" step="5" min="0" max="300" /></label>
-    </div>
-    <div class="note" id="chkInfo">No mission file loaded.</div>
-    <div class="issues" id="chkLegs"></div>
-    <div class="row"><button id="chkLift" class="ghost" disabled${btnTip('chkLift')}>Export corrected KMZ</button><button id="chkClear" class="link" hidden>Clear</button></div>
-    <div class="row" style="margin-top:8px"><select id="dsmDilate" title="How the DEM is turned into the surface DJI follows"><option value="75">DSM: highest ground within 75 m</option><option value="30">DSM: highest ground within 30 m</option><option value="0">DSM: bare DEM</option></select>
-      <select id="dsmMargin" title="Margin added to every cell: Pilot 2 smooths its route and came down 35 m below surface + AGL over peaks (17 Oct 2026)"><option value="40">+ 40 m margin</option><option value="20">+ 20 m</option><option value="0">no margin</option></select>
-      <button id="dsmBtn" class="ghost" disabled${btnTip('dsmBtn')}>Export DSM for Pilot 2</button></div>
-  </section>
-  <section>
     <details class="adv"><summary>Sync to RC (not in use) ${ti('sync')}</summary>
     <label class="lbl" for="apiUrl">Sync server URL</label>
     <input id="apiUrl" type="url" placeholder="https://…" autocomplete="off" />
@@ -321,6 +323,7 @@ app.innerHTML = `
     <div class="pair-code" id="pairCode" hidden></div>
     </details>
   </section>
+  </details>
 </aside>
 <main>
   <div id="map"></div>
@@ -1131,7 +1134,7 @@ function renderDeck(r: View | null) {
 const fmt = (v: number, d = 0) => v.toLocaleString('en-ZA', { minimumFractionDigits: d, maximumFractionDigits: d });
 function renderStats(r: Result | null) {
   const el = $('stats');
-  if (!r) { el.innerHTML = `<div class="empty">${state.planError ? 'No plan: see Checks.' : 'Load a block to plan.'}</div>`; return; }
+  if (!r) { el.innerHTML = `<div class="empty">${state.planError ? 'No plan: see Checks.' : state.check ? 'Mission file loaded: see the checker, the map and the profile.' : 'Drop a mission file to check it against the terrain, or plan a route under "Plan a route here".'}</div>`; return; }
   const { plan, route, st, cov, photo } = r;
   type Row = [string, string, string?] | string;
   const rows: Row[] = ['Block',
@@ -1402,12 +1405,9 @@ function routeReachM(): number {
   const fig8 = !isPhoto() && state.survey.fig8 ? 3 * r + Math.max(2.5 * r, DEFAULTS.alignStraightS * v) : 0;
   return Math.max(P('runInM'), P('runOutM')) + fig8 + Math.max(P('corridorM'), (v * v) / (2 * SAFETY.brakeMs2)) + 300;
 }
-$('fetchDem').onclick = async () => {
-  if (!state.aoi) return;
+async function fetchGlo30(b: Bbox) {
   const key = otKey.value.trim();
-  if (!key) { updateDemInfo('Enter your OpenTopography API key first.', true); return; }
-  const pts = [...state.aoi.poly, ...(state.home ? [state.home] : [])];
-  const b = bufferedBbox(pts, Math.max(2000, routeReachM()));
+  if (!key) { updateDemInfo('Enter your OpenTopography API key first (Terrain section).', true); return; }
   updateDemInfo('Requesting Copernicus GLO-30 from OpenTopography…');
   try {
     const res = await fetch(openTopoUrl(b, key, 'COP30'));
@@ -1416,6 +1416,11 @@ $('fetchDem').onclick = async () => {
     if (!res.ok || !/^(II\*|MM\0\*)/.test(head.slice(0, 4))) throw new Error(`OpenTopography: ${head.replace(/<[^>]+>/g, ' ').trim().slice(0, 160) || res.status}`);
     await useDemBuffer(buf, 'Copernicus GLO-30', 'glo30', 'orthometric');
   } catch (e) { updateDemInfo((e as Error).message, true); }
+}
+$('fetchDem').onclick = () => {
+  if (!state.aoi) return;
+  const pts = [...state.aoi.poly, ...(state.home ? [state.home] : [])];
+  fetchGlo30(bufferedBbox(pts, Math.max(2000, routeReachM())));
 };
 let demFile: { buf: ArrayBuffer; name: string } | null = null;   // the last GeoTIFF the user gave us
 async function onDemFile(f: File) {
@@ -1458,7 +1463,7 @@ async function routeOrBlock(f: File) {
   onBlockFile(f);
 }
 const chkAgl = $<HTMLInputElement>('chkAgl'), chkCorr = $<HTMLInputElement>('chkCorr');
-chkAgl.value = String(P('aglM')); chkCorr.value = String(P('corridorM'));
+chkAgl.value = String(state.aoi ? P('aglM') : 300); chkCorr.value = String(P('corridorM'));
 const chkA = () => Math.max(30, Number(chkAgl.value) || P('aglM')), chkC = () => Math.max(0, Number(chkCorr.value) || 0);
 let checkFile: { name: string; waylines: string; template: string | null } | null = null;
 let lastHomeKey = '';
@@ -1469,11 +1474,14 @@ async function onCheckFile(f: File) {
     const waylines = await get(/waylines\.wpml$/);
     if (!waylines) throw new Error('No wpmz/waylines.wpml in this KMZ.');
     checkFile = { name: f.name.replace(/\.kmz$/i, ''), waylines, template: await get(/template\.kml$/) };
+    $<HTMLButtonElement>('chkFetch').disabled = false;
     // a mapping mission's template carries the AGL it was planned with; a waypoint template's "height" is absolute
     try {
       const probe = readMissionFiles(waylines, checkFile.template, 0);
       if (probe.templateType && probe.templateType !== 'waypoint' && probe.flightHeightM != null && probe.flightHeightM >= 30 && probe.flightHeightM <= 1500) chkAgl.value = String(probe.flightHeightM);
     } catch { /* needs the take-off point; handled in runCheck */ }
+    const hint = /AGL(\d{2,4})/i.exec(f.name);   // this planner's own files carry the AGL in their name
+    if (hint) chkAgl.value = hint[1];
     $('chkClear').hidden = false;
     runCheck();
   } catch (e) { state.check = null; $('chkInfo').textContent = (e as Error).message; $('chkLegs').innerHTML = ''; renderCheckMap(); }
@@ -1551,8 +1559,14 @@ function renderCheckProfile(svg: SVGSVGElement, info: HTMLElement) {
   info.textContent = `${c.name}: file heights ${fmt(Math.min(...st.map(s => s.h)))}–${fmt(Math.max(...st.map(s => s.h)))} m; lowest clearance ${fmt(r.minClearM)} m over the corridor` + (c.liftedReport ? ` · corrected route in blue: ${c.lifted!.length} waypoints, lowest ${fmt(c.liftedReport.minClearM)} m` : '');
 }
 $<HTMLInputElement>('fileCheck').onchange = e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) onCheckFile(f); };
+$('chkFetch').onclick = () => {
+  const c = state.check; if (!c) return;
+  const pts = [...c.mission.wps.map(w => [w.lon, w.lat] as LonLat), ...(state.home ? [state.home] : [])];
+  fetchGlo30(bufferedBbox(pts, Math.max(1500, chkC() + 1000)));
+};
+if (state.aoi) $<HTMLDetailsElement>('plannerAdv').open = true;
 chkAgl.onchange = chkCorr.onchange = () => runCheck();
-$('chkClear').onclick = () => { checkFile = null; state.check = null; $('chkInfo').textContent = 'No mission file loaded.'; $('chkLegs').innerHTML = ''; $<HTMLButtonElement>('chkLift').disabled = true; $('chkClear').hidden = true; renderCheckMap(); renderProf(); };
+$('chkClear').onclick = () => { checkFile = null; state.check = null; $<HTMLButtonElement>('chkFetch').disabled = true; $('chkInfo').textContent = 'No mission file loaded.'; $('chkLegs').innerHTML = ''; $<HTMLButtonElement>('chkLift').disabled = true; $('chkClear').hidden = true; renderCheckMap(); renderProf(); };
 $('chkLift').onclick = async () => {
   const c = state.check, dem = state.dem;
   if (!c || !dem || dem.synthetic) return;

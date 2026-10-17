@@ -216,6 +216,10 @@ DEM clip (AOI + buffer), offline basemap tiles.
   DSM file; DJI's built-in source is ASTER GDEM 30 m). Pilot 2's expected vertical datum is undocumented: the first
   mission made from such a DSM must be checked here before it is flown. tools/implied-dem.ts showed what FH2
   believed: 10–16 m HIGH on the flats, 12 m median / 42 m worst LOW on the koppie tops (a smoothed/coarse DEM).
+- **Operating model since 17 Oct 2026**: the web app is the Mission Checker (checker + terrain/DSM tools first; the
+  route planner folded under "Plan a route here" for steep sites). Open sites: Pilot 2 mapping mission, efficiency
+  mode, planner DSM (max 75 m + 40 m, ellipsoidal), mission exported and checked here before flight. No further
+  route-generator development unless the checker or a steep site shows a need.
 - **Home DSM test (17 Oct 2026, samples/home-dsm/RESULT-2026-10-17.txt)**: Pilot 2 mapping missions on DJI's ASTER
   data (300 m AGL) vs DSMs exported by the planner (320 m). DJI data: 45 m low under the line, 74 m low 75 m beside
   it (as FH2). DSM A/C (max within 75 m, ellipsoidal): 10–19 m low under the line at the worst point, 33–35 m below
