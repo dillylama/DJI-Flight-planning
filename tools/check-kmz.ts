@@ -36,6 +36,7 @@ const f1 = (x: number) => x.toFixed(1);
 console.log(`\nclearance against the DEM, planned AGL ${agl} m, corridor ±${corridor} m, margin ${margin} m, route ${(rep.lengthM / 1000).toFixed(2)} km:`);
 console.log(`  lowest over the ground under the line ${f1(rep.minUnderM)} m; lowest over the corridor ${f1(rep.minClearM)} m (leg ${rep.worstLeg != null ? rep.worstLeg + 1 : '-'})`);
 console.log(`  legs short of ${agl - margin} m: ${rep.nShort} of ${rep.legs.length}, ${(rep.shortLengthM / 1000).toFixed(2)} km of route`);
+console.log(`  too high: above corridor + ${agl} m by ${f1(rep.aboveM.p50)} m (median), ${f1(rep.aboveM.p95)} m (95 %), ${f1(rep.aboveM.max)} m (max) → about ${Math.round(100 * rep.densityFactor)} % of the planned point density`);
 const shortLegs = rep.legs.filter(l => l.shortM > 0).sort((a, b) => b.shortM - a.shortM);
 for (const l of shortLegs.slice(0, 15)) console.log(`    leg ${String(l.leg + 1).padStart(3)} (WP ${l.leg + 1}→${l.leg + 2}, ${l.lengthM.toFixed(0)} m): corridor clearance ${f1(l.minClearM)} m at ${l.minClearAtM.toFixed(0)} m along, under the line ${f1(l.minUnderM)} m → ${f1(l.shortM)} m short`);
 if (shortLegs.length > 15) console.log(`    … ${shortLegs.length - 15} more`);

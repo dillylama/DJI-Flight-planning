@@ -115,6 +115,10 @@ export interface CheckReport {
   nShort: number;               // legs below aglM − marginM over the corridor
   shortLengthM: number;         // route length flown short
   worstLeg: number | null;
+  // Too high: height above (corridor max + AGL) along the route — what a DSM's dilation, a margin and DJI's own
+  // smoothing cost in density. densityFactor ≈ aglM / (aglM + median excess): LiDAR density falls about 1/height.
+  aboveM: { p50: number; p95: number; max: number };
+  densityFactor: number;
 }
 
 function legStations(elev: ElevFn, proj: ReturnType<typeof makeProj>, a: CheckWp, b: CheckWp, corridorM: number, stepM: number): { corr: Station[]; under: Station[]; A: XY; B: XY } {
@@ -148,7 +152,11 @@ export function checkClearance(wps: CheckWp[], elev: ElevFn, o: CheckOptions): C
     if (shortM > 0) shortLen += L;
     s0 += L;
   }
-  return { aglM: o.aglM, corridorM: o.corridorM, marginM, lengthM: s0, stations, legs, minClearM: minClear, minUnderM: minUnder, nShort: legs.filter(l => l.shortM > 0).length, shortLengthM: shortLen, worstLeg: worst };
+  const ex = stations.map(st => st.h - st.corridor - o.aglM).sort((a, b) => a - b);
+  const q = (p: number) => (ex.length ? ex[Math.floor(p * (ex.length - 1))] : 0);
+  const aboveM = { p50: q(0.5), p95: q(0.95), max: q(1) };
+  return { aglM: o.aglM, corridorM: o.corridorM, marginM, lengthM: s0, stations, legs, minClearM: minClear, minUnderM: minUnder, nShort: legs.filter(l => l.shortM > 0).length, shortLengthM: shortLen, worstLeg: worst,
+    aboveM, densityFactor: o.aglM / Math.max(1, o.aglM + Math.max(0, aboveM.p50)) };
 }
 
 // Heights rebuilt to the planned AGL over the DEM, the planner's own way (heights.ts): dense vertices every

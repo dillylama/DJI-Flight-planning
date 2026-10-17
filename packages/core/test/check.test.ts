@@ -75,6 +75,7 @@ test('checkClearance finds the koppie under a level leg; the planner-style corri
   assert.equal(rep.nShort, 1);
   assert.ok(rep.legs[0].shortM > 45, `short ${rep.legs[0].shortM}`);
   assert.ok(rep.stations.length > 100);
+  assert.ok(rep.aboveM.max < 1 && rep.densityFactor > 0.99, 'a level leg at the plan over the plain is not too high');
   assert.ok(Math.abs(rep.lengthM - 60 * d * 111320 * Math.cos(lat * Math.PI / 180)) < 10);
 });
 

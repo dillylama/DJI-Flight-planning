@@ -224,7 +224,10 @@ DEM clip (AOI + buffer), offline basemap tiles.
   data (300 m AGL) vs DSMs exported by the planner (320 m). DJI data: 45 m low under the line, 74 m low 75 m beside
   it (as FH2). DSM A/C (max within 75 m, ellipsoidal): 10–19 m low under the line at the worst point, 33–35 m below
   surface + AGL where Pilot 2 smooths over a peak. Pilot 2 reads DSM numbers as ELLIPSOIDAL whatever the vertical
-  tag (the MSL file flew 30 m low); tags are irrelevant. → export the DSM with a 40 m margin. Pilot 2
+  tag (the MSL file flew 30 m low); tags are irrelevant. → export the DSM with a 40 m margin. The price is height:
+  over the home block the 75 m dilation adds 21 m (median, 41 m at the 90th percentile), Pilot 2's smoothing +23 m,
+  the margin +40 m → ~80 % of the planned density; 30 m dilation adds only 2 m. The checker reports "too high"
+  (median/max above corridor + AGL and the density factor) so both sides are seen before flying. Pilot 2
   "efficiency" mode = no stops, 18–21 s turns, 14.9 m/s (normal mode: 2–6 stops, 33–110 s turns). Open-site
   workflow: Pilot 2 + efficiency mode + planner DSM (max 75 m + 40 m, ellipsoidal) + the mission checker.
 - RC-lost behaviour is a take-off option (`rcLost`: goBack = DJI RC-lost action, continue = WPML exitOnRCLost goContinue),

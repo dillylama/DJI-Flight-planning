@@ -1503,7 +1503,8 @@ function runCheck() {
     const n = mission.notes.length ? ' ' + mission.notes.join(' ') : '';
     info.innerHTML = `<b>${esc(checkFile.name)}</b>: ${mission.wps.length} waypoints, ${(report.lengthM / 1000).toFixed(2)} km, heights ${esc(mission.heightMode)}${mission.templateType ? `, ${esc(mission.templateType)} template` : ''}.${esc(n)}<br>`
       + `Planned ${report.aglM} m: lowest clearance <b>${fmt(report.minUnderM)} m</b> over the ground under the line, <b>${fmt(report.minClearM)} m</b> over the ±${report.corridorM} m corridor. `
-      + (report.nShort ? `<span style="color:var(--c-err)">${report.nShort} of ${report.legs.length} legs are more than ${report.marginM} m short (${(report.shortLengthM / 1000).toFixed(2)} km).</span>` : `<span style="color:var(--c-ok)">Every leg holds the planned clearance within ${report.marginM} m.</span>`);
+      + (report.nShort ? `<span style="color:var(--c-err)">${report.nShort} of ${report.legs.length} legs are more than ${report.marginM} m short (${(report.shortLengthM / 1000).toFixed(2)} km).</span>` : `<span style="color:var(--c-ok)">Every leg holds the planned clearance within ${report.marginM} m.</span>`)
+      + ` Too high: ${fmt(report.aboveM.p50)} m above corridor + AGL in the middle, ${fmt(report.aboveM.max)} m at most → about ${Math.round(100 * report.densityFactor)} % of the planned point density.`;
     const bad = report.legs.filter(l => l.shortM > 0).sort((a, b) => b.shortM - a.shortM);
     legs.innerHTML = bad.slice(0, 12).map(l => `<div class="issue error"><b>short</b><span>Leg ${l.leg + 1} (WP ${l.leg + 1}→${l.leg + 2}, ${fmt(l.lengthM)} m): ${fmt(l.minUnderM)} m over the ground under the line, ${fmt(l.minClearM)} m over the corridor → ${fmt(l.shortM)} m short</span></div>`).join('')
       + (bad.length > 12 ? `<div class="issue info"><b>…</b><span>${bad.length - 12} more short legs</span></div>` : '');
