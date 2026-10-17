@@ -307,6 +307,7 @@ app.innerHTML = `
     <div class="issues" id="chkLegs"></div>
     <div class="row"><button id="chkLift" class="ghost" disabled${btnTip('chkLift')}>Export corrected KMZ</button><button id="chkClear" class="link" hidden>Clear</button></div>
     <div class="row" style="margin-top:8px"><select id="dsmDilate" title="How the DEM is turned into the surface DJI follows"><option value="75">DSM: highest ground within 75 m</option><option value="30">DSM: highest ground within 30 m</option><option value="0">DSM: bare DEM</option></select>
+      <select id="dsmMargin" title="Margin added to every cell: Pilot 2 smooths its route and came down 35 m below surface + AGL over peaks (17 Oct 2026)"><option value="40">+ 40 m margin</option><option value="20">+ 20 m</option><option value="0">no margin</option></select>
       <button id="dsmBtn" class="ghost" disabled${btnTip('dsmBtn')}>Export DSM for Pilot 2</button></div>
   </section>
   <section>
@@ -1579,14 +1580,14 @@ $('chkLift').onclick = async () => {
 $('dsmBtn').onclick = () => {
   const dem = state.dem;
   if (!dem?.raster) return;
-  const dilateM = Number($<HTMLSelectElement>('dsmDilate').value) || 0;
+  const dilateM = Number($<HTMLSelectElement>('dsmDilate').value) || 0, marginM = Number($<HTMLSelectElement>('dsmMargin').value) || 0;
   const pts: LonLat[] = state.check ? state.check.mission.wps.map(w => [w.lon, w.lat] as LonLat) : state.aoi ? state.aoi.poly : [];
   const bbox = pts.length ? bufferedBbox(pts, Math.max(1000, dilateM + 500)) : undefined;
   try {
-    const spec = dsmFromRaster(dem.raster, { dilateM, marginM: 0, datum: 'ellipsoidal', bbox });
-    const name = `dsm-${(state.check?.name ?? state.aoi?.name ?? 'dem').replace(/[^\w-]+/g, '_').slice(0, 40)}-max${dilateM}m-ellipsoidal.tif`;
+    const spec = dsmFromRaster(dem.raster, { dilateM, marginM, datum: 'ellipsoidal', bbox });
+    const name = `dsm-${(state.check?.name ?? state.aoi?.name ?? 'dem').replace(/[^\w-]+/g, '_').slice(0, 40)}-max${dilateM}m-plus${marginM}m-ellipsoidal.tif`;
     download(name, new Uint8Array(writeGeoTiff(spec)), 'image/tiff');
-    $('demInfo').textContent = `DSM written: ${spec.width} × ${spec.height} cells, highest ground within ${dilateM} m, WGS84 ellipsoidal heights, EPSG:4326 → ${name}. Import in Pilot 2: Mapping mission → Terrain Follow → DSM file. Check the mission it produces here before flying.`;
+    $('demInfo').textContent = `DSM written: ${spec.width} × ${spec.height} cells, highest ground within ${dilateM} m + ${marginM} m, WGS84 ellipsoidal heights, EPSG:4326 → ${name}. Import in Pilot 2: Mapping mission → Terrain Follow → DSM file. Check the mission it produces here before flying.`;
   } catch (e) { $('demInfo').textContent = (e as Error).message; }
 };
 
