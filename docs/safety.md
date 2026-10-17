@@ -238,15 +238,13 @@ passes there, and flew the remaining 30 waypoints to the end. The L3 recorded on
 Mean ground speed on the route was 5.2 and 6.8 m/s against 6.0 and 7.7 m/s asked by the file over the same legs:
 the aircraft runs about 13 % under the file speeds between waypoints, on top of the planner's slowed legs.
 
-## 5b. Checking someone else's file (added 15 Oct 2026)
+## 5b. Checking someone else's file (added 15 Oct 2026; the checker never edits the route since 17 Oct)
 
 A route planned in Pilot 2 or FlightHub 2 can be dropped on the planner ("Check a mission file") or run through
 `tools/check-kmz.ts`. The waypoints are taken from waylines.wpml (the file the aircraft executes), their heights
 brought to EGM96 whatever the file's height mode, and every leg is sampled against the DEM: clearance over the
 ground directly under the line and over the highest ground within the corridor, against the AGL the mission was
-planned for. A leg more than 10 m short is reported (the same criterion as gate G4). "Export corrected KMZ" writes
-the same route with this planner's heights and speed rule, through the same writer and the same independent check as
-our own files; it never downloads a file that failed the check. "Export DSM for Pilot 2" gives DJI's own terrain
+planned for. A leg more than 10 m short is reported (the same criterion as gate G4). The checker never changes the route: the flight plan stays Pilot 2's. "Export DSM for Pilot 2" gives DJI's own terrain
 following a surface built from our DEM with the corridor rule folded in (highest ground within 75 m of each cell);
 the mission Pilot 2 builds on it must come back through the checker before it is flown. Measured 17 Oct 2026 (home
 block): Pilot 2 reads the DSM's numbers as WGS84 ellipsoidal heights whatever the file's vertical tag (a file with

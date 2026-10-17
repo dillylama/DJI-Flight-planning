@@ -9,8 +9,8 @@ import {
   bufferedBbox, openTopoUrl, planTransit, coverage, checkLimits, planSorties, writeWpml, writeKmz,
   cameraFovDeg, gsdCm, aglForGsd, photoPlan, lidarDensity,
   safetyChecks, clearanceBudget, verifyRouteFiles, toUgcsCsv,
-  readMissionFiles, checkClearance, liftRoute, liftedRoute, wpmlOptionsFor, dsmFromRaster, writeGeoTiff,
-  type MissionFile, type CheckReport, type CheckWp, type Raster,
+  readMissionFiles, checkClearance, previewDsm, embeddedDsm, dsmFromRaster, writeGeoTiff,
+  type MissionFile, type CheckReport, type Raster,
   type PlanOptions, type Plan, type Route, type FlightWp, type RouteStats, type Issue, type ElevFn, type Bbox,
   type LonLat, type TakeoffOptions, type Transit, type Coverage, type Pt3, type Camera, type PhotoPlan, type SortiePlan,
   type ClearanceBudget, type VerifyReport, type WpmlFiles, type VerticalDatum,
@@ -27,7 +27,7 @@ import { publish, newPairingCode, listDevices, type ApiCfg } from './sync.ts';
 // `synthetic` terrain is the demo's made-up ridge: fine for a preview, never for a route that is exported.
 interface Dem { name: string; elev: ElevFn; bbox?: Bbox; synthetic: boolean; source: 'demo' | 'glo30' | 'file'; datum: VerticalDatum; gaps: number; raster?: Raster }
 // A mission file (Pilot 2, FlightHub 2 or ours) being checked against the terrain (core/check.ts).
-interface CheckState { name: string; mission: MissionFile; report: CheckReport | null; lifted: CheckWp[] | null; liftedReport: CheckReport | null; error: string | null }
+interface CheckState { name: string; mission: MissionFile; report: CheckReport | null }
 // An issue that belongs to one sortie's route (its waypoint numbers refer to that route).
 type PlanIssue = Issue & { sortie?: number };
 // One route file as it will be flown: built once, checked by the independent verifier, exported byte for byte.
@@ -214,9 +214,13 @@ app.innerHTML = `
     <div class="row"><button id="chkFetch" class="ghost" disabled${btnTip('chkFetch')}>Fetch GLO-30 around this mission</button></div>
     <div class="note" id="chkInfo">No mission file loaded. Drop a KMZ exported from Pilot 2 or FlightHub 2 (route library → export), or one made here.</div>
     <div class="issues" id="chkLegs"></div>
-    <div class="row"><button id="chkLift" class="ghost" disabled${btnTip('chkLift')}>Export corrected KMZ</button><button id="chkClear" class="link" hidden>Clear</button></div>
-    <div class="row" style="margin-top:8px"><select id="dsmDilate" title="How the DEM is turned into the surface DJI follows"><option value="75">DSM: highest ground within 75 m</option><option value="30">DSM: highest ground within 30 m</option><option value="0">DSM: bare DEM</option></select>
-      <select id="dsmMargin" title="Margin added to every cell: Pilot 2 smooths its route and came down 35 m below surface + AGL over peaks (17 Oct 2026)"><option value="40">+ 40 m margin</option><option value="20">+ 20 m</option><option value="0">no margin</option></select>
+    <div class="row"><button id="chkClear" class="link" hidden>Clear</button></div>
+    <h2 style="margin-top:12px">A better DSM for Pilot 2 ${ti('dsmBtn')}</h2>
+    <div class="row"><select id="dsmDilate" title="Each DSM cell becomes the highest ground within this radius: the corridor rule, which DJI's under-the-line follow lacks">
+      <option value="0">Highest ground within 0 m</option><option value="30">within 30 m</option><option value="50">within 50 m</option><option value="75" selected>within 75 m</option></select>
+      <select id="dsmMargin" title="Added to every cell. Pilot 2 smooths its route (straight legs between sparse waypoints) and came down to 35 m below surface + AGL over peaks"><option value="0">+ 0 m</option><option value="10">+ 10 m</option><option value="20">+ 20 m</option><option value="30">+ 30 m</option><option value="40" selected>+ 40 m</option><option value="50">+ 50 m</option></select></div>
+    <div class="note" id="dsmPreview">Load a mission and terrain to see what a DSM would do to that route.</div>
+    <div class="row"><button id="dsmSuggest" class="ghost" disabled${btnTip('dsmSuggest')}>Suggest</button>
       <button id="dsmBtn" class="ghost" disabled${btnTip('dsmBtn')}>Export DSM for Pilot 2</button></div>
   </section>
   <section>
@@ -1465,7 +1469,7 @@ async function routeOrBlock(f: File) {
 const chkAgl = $<HTMLInputElement>('chkAgl'), chkCorr = $<HTMLInputElement>('chkCorr');
 chkAgl.value = String(state.aoi ? P('aglM') : 300); chkCorr.value = String(P('corridorM'));
 const chkA = () => Math.max(30, Number(chkAgl.value) || P('aglM')), chkC = () => Math.max(0, Number(chkCorr.value) || 0);
-let checkFile: { name: string; waylines: string; template: string | null } | null = null;
+let checkFile: { name: string; waylines: string; template: string | null; dsm: ElevFn | null; dsmTiles: number } | null = null;
 let lastHomeKey = '';
 async function onCheckFile(f: File) {
   try {
@@ -1473,7 +1477,10 @@ async function onCheckFile(f: File) {
     const get = async (re: RegExp) => { const n = Object.keys(zip.files).find(x => re.test(x)); return n ? zip.files[n].async('string') : null; };
     const waylines = await get(/waylines\.wpml$/);
     if (!waylines) throw new Error('No wpmz/waylines.wpml in this KMZ.');
-    checkFile = { name: f.name.replace(/\.kmz$/i, ''), waylines, template: await get(/template\.kml$/) };
+    // the terrain model(s) the mission was planned on travel inside the KMZ (wpmz/res/dsm): read them, to see what a change does
+    const tiles = Object.keys(zip.files).filter(n => /res\/dsm\/.*\.tiff?$/i.test(n));
+    const dsm = await embeddedDsm(await Promise.all(tiles.map(n => zip.files[n].async('arraybuffer'))));
+    checkFile = { name: f.name.replace(/\.kmz$/i, ''), waylines, template: await get(/template\.kml$/), dsm, dsmTiles: tiles.length };
     $<HTMLButtonElement>('chkFetch').disabled = false;
     // a mapping mission's template carries the AGL it was planned with; a waypoint template's "height" is absolute
     try {
@@ -1488,14 +1495,14 @@ async function onCheckFile(f: File) {
 }
 function runCheck() {
   $<HTMLButtonElement>('dsmBtn').disabled = !state.dem?.raster;
-  if (!checkFile) return;
+  if (!checkFile) { renderDsmPreview(); return; }
   const info = $('chkInfo'), legs = $('chkLegs');
-  $<HTMLButtonElement>('chkLift').disabled = true;
+  $<HTMLButtonElement>('dsmSuggest').disabled = true;
   try {
     const dem = state.dem;
     const home = state.home && dem ? dem.elev(state.home[0], state.home[1]) : null;
     const mission = readMissionFiles(checkFile.waylines, checkFile.template, home ?? null);
-    state.check = { name: checkFile.name, mission, report: null, lifted: null, liftedReport: null, error: null };
+    state.check = { name: checkFile.name, mission, report: null };
     if (!dem || dem.synthetic) { info.textContent = `${checkFile.name}: ${mission.wps.length} waypoints read. Load terrain (Fetch GLO-30 or drop a GeoTIFF) to measure it.`; legs.innerHTML = ''; renderCheckMap(); renderProf(); return; }
     if (mission.wps.some(w => dem.elev(w.lon, w.lat) == null)) { info.textContent = `${checkFile.name}: the loaded DEM does not cover this route. Load a block around it and fetch GLO-30, or drop a wider GeoTIFF.`; legs.innerHTML = ''; renderCheckMap(); renderProf(); return; }
     const report = checkClearance(mission.wps, dem.elev, { aglM: chkA(), corridorM: chkC(), marginM: 10 });
@@ -1508,10 +1515,11 @@ function runCheck() {
     const bad = report.legs.filter(l => l.shortM > 0).sort((a, b) => b.shortM - a.shortM);
     legs.innerHTML = bad.slice(0, 12).map(l => `<div class="issue error"><b>short</b><span>Leg ${l.leg + 1} (WP ${l.leg + 1}→${l.leg + 2}, ${fmt(l.lengthM)} m): ${fmt(l.minUnderM)} m over the ground under the line, ${fmt(l.minClearM)} m over the corridor → ${fmt(l.shortM)} m short</span></div>`).join('')
       + (bad.length > 12 ? `<div class="issue info"><b>…</b><span>${bad.length - 12} more short legs</span></div>` : '');
-    $<HTMLButtonElement>('chkLift').disabled = false;
+    renderDsmPreview();
   } catch (e) {
     const msg = (e as Error).message;
     state.check = null;
+    $('dsmPreview').textContent = 'Load a mission and terrain to see what a DSM would do to that route.';
     info.textContent = /take-off point/.test(msg) ? msg + ' (Set home on the map at the take-off position: the DEM ground there is then used.)' : msg;
     legs.innerHTML = '';
   }
@@ -1528,10 +1536,6 @@ function renderCheckMap() {
     feats.push({ type: 'Feature', properties: { short: legShort.get(i) ?? 0, lifted: false }, geometry: { type: 'LineString', coordinates: [[a.lon, a.lat], [b.lon, b.lat]] } });
   }
   for (const w of c.mission.wps) feats.push({ type: 'Feature', properties: { lifted: false }, geometry: { type: 'Point', coordinates: [w.lon, w.lat] } });
-  if (c.lifted) {
-    feats.push({ type: 'Feature', properties: { short: 0, lifted: true }, geometry: { type: 'LineString', coordinates: c.lifted.map(w => [w.lon, w.lat]) } });
-    for (const w of c.lifted) if (w.inserted) feats.push({ type: 'Feature', properties: { lifted: true }, geometry: { type: 'Point', coordinates: [w.lon, w.lat] } });
-  }
   s.setData({ type: 'FeatureCollection', features: feats });
   if (!c.report && c.mission.wps.length) {   // first look: bring the file into view
     const lons = c.mission.wps.map(w => w.lon), lats = c.mission.wps.map(w => w.lat);
@@ -1543,21 +1547,20 @@ function renderCheckMap() {
 function renderCheckProfile(svg: SVGSVGElement, info: HTMLElement) {
   const c = state.check!, r = c.report!;
   const Wd = svg.clientWidth || 600, Hd = svg.clientHeight || 160, L = 44, R = 10, T = 8, B = 18;
-  const ys = [...r.stations.map(s => s.h), ...r.stations.map(s => s.under), ...r.stations.map(s => s.corridor + r.aglM), ...(c.liftedReport?.stations.map(s => s.h) ?? [])];
+  const ys = [...r.stations.map(s => s.h), ...r.stations.map(s => s.under), ...r.stations.map(s => s.corridor + r.aglM)];
   const y0 = Math.min(...ys) - 10, y1 = Math.max(...ys) + 10, sMax = r.lengthM || 1;
   const X = (s: number) => L + ((Wd - L - R) * s) / sMax, Y = (h: number) => T + ((Hd - T - B) * (y1 - h)) / (y1 - y0);
   const path = (pts: { s: number; v: number }[]) => pts.map((p, i) => `${i ? 'L' : 'M'}${X(p.s).toFixed(1)},${Y(p.v).toFixed(1)}`).join(' ');
   const st = r.stations;
   const terrain = path(st.map(s => ({ s: s.s, v: s.under }))) + ` L${X(sMax).toFixed(1)},${(Hd - B).toFixed(1)} L${L},${(Hd - B).toFixed(1)} Z`;
   const ticks = [y0 + 10, (y0 + y1) / 2, y1 - 10].map(v => `<text class="axis" x="2" y="${(Y(v) + 4).toFixed(1)}">${fmt(v)}</text><line class="grid" x1="${L}" x2="${Wd - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/>`).join('');
-  const lifted = c.liftedReport ? `<path d="${path(c.liftedReport.stations.map(s => ({ s: s.s, v: s.h })))}" fill="none" stroke="${css('--c-transit')}" stroke-width="2"/>` : '';
   const shortSeg = st.filter(s => s.h - s.corridor < r.aglM - r.marginM).map(s => `<circle cx="${X(s.s).toFixed(1)}" cy="${Y(s.h).toFixed(1)}" r="2" fill="${css('--c-err')}"/>`).join('');
   svg.setAttribute('viewBox', `0 0 ${Wd} ${Hd}`);
   svg.innerHTML = ticks + `<path class="terrain" d="${terrain}"/>` + `<path d="${path(st.map(s => ({ s: s.s, v: s.corridor })))}" fill="none" stroke="#b08a5a" stroke-width="1"/>`
-    + `<path class="agl-floor" d="${path(st.map(s => ({ s: s.s, v: s.corridor + r.aglM })))}"/>` + `<path class="flight" d="${path(st.map(s => ({ s: s.s, v: s.h })))}"/>` + shortSeg + lifted
+    + `<path class="agl-floor" d="${path(st.map(s => ({ s: s.s, v: s.corridor + r.aglM })))}"/>` + `<path class="flight" d="${path(st.map(s => ({ s: s.s, v: s.h })))}"/>` + shortSeg
     + `<text class="axis" x="${Wd - R}" y="${Hd - 4}" text-anchor="end">${(sMax / 1000).toFixed(1)} km along the route</text>`;
   $('floorLabel').textContent = 'Corridor + planned AGL';
-  info.textContent = `${c.name}: file heights ${fmt(Math.min(...st.map(s => s.h)))}–${fmt(Math.max(...st.map(s => s.h)))} m; lowest clearance ${fmt(r.minClearM)} m over the corridor` + (c.liftedReport ? ` · corrected route in blue: ${c.lifted!.length} waypoints, lowest ${fmt(c.liftedReport.minClearM)} m` : '');
+  info.textContent = `${c.name}: file heights ${fmt(Math.min(...st.map(s => s.h)))}–${fmt(Math.max(...st.map(s => s.h)))} m; lowest clearance ${fmt(r.minClearM)} m over the corridor`;
 }
 $<HTMLInputElement>('fileCheck').onchange = e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) onCheckFile(f); };
 $('chkFetch').onclick = () => {
@@ -1567,42 +1570,64 @@ $('chkFetch').onclick = () => {
 };
 if (state.aoi) $<HTMLDetailsElement>('plannerAdv').open = true;
 chkAgl.onchange = chkCorr.onchange = () => runCheck();
-$('chkClear').onclick = () => { checkFile = null; state.check = null; $<HTMLButtonElement>('chkFetch').disabled = true; $('chkInfo').textContent = 'No mission file loaded.'; $('chkLegs').innerHTML = ''; $<HTMLButtonElement>('chkLift').disabled = true; $('chkClear').hidden = true; renderCheckMap(); renderProf(); };
-$('chkLift').onclick = async () => {
+$('chkClear').onclick = () => { checkFile = null; state.check = null; renderDsmPreview(); $<HTMLButtonElement>('chkFetch').disabled = true; $('chkInfo').textContent = 'No mission file loaded.'; $('chkLegs').innerHTML = ''; $<HTMLButtonElement>('chkLift').disabled = true; $('chkClear').hidden = true; renderCheckMap(); renderProf(); };
+// ── A better DSM for Pilot 2: preview against the loaded mission, suggest, export (never edits the route) ─────
+// The DEM turned into the surface Pilot 2 follows: each cell the highest ground within `dilateM`, + `marginM`.
+const surfaceCache = new Map<string, ElevFn>();
+function surface(dem: Dem, dilateM: number, marginM: number): ElevFn {
+  const key = `${dem.name}|${dilateM}|${marginM}`;
+  let e = surfaceCache.get(key);
+  if (!e) {
+    const sp = dsmFromRaster(dem.raster!, { dilateM, marginM, datum: 'orthometric' });
+    e = rasterElev({ width: sp.width, height: sp.height, west: sp.tie[0], north: sp.tie[1], dLon: sp.pixel[0], dLat: sp.pixel[1], data: sp.values, nodata: sp.nodata ?? null, pixelIsPoint: false });
+    surfaceCache.set(key, e);
+    if (surfaceCache.size > 40) surfaceCache.delete(surfaceCache.keys().next().value!);
+  }
+  return e;
+}
+const dsmChoice = () => ({ dilateM: Number($<HTMLSelectElement>('dsmDilate').value) || 0, marginM: Number($<HTMLSelectElement>('dsmMargin').value) || 0 });
+function renderDsmPreview() {
+  const c = state.check, dem = state.dem, el = $('dsmPreview');
+  $<HTMLButtonElement>('dsmBtn').disabled = !dem?.raster;
+  $<HTMLButtonElement>('dsmSuggest').disabled = true;
+  if (!c?.report || !dem?.raster || dem.synthetic || !checkFile) { el.textContent = dem?.raster ? 'Drop a mission file to see what this DSM would do to that route.' : 'Load terrain (Fetch GLO-30 or drop a GeoTIFF) to make a DSM.'; return; }
+  const cur = checkFile.dsm ?? dem.elev, { dilateM, marginM } = dsmChoice();
+  const now = previewDsm(c.report, cur, cur), next = previewDsm(c.report, cur, surface(dem, dilateM, marginM));
+  if (!now || !next) { el.textContent = 'The DSM does not cover the whole route.'; return; }
+  const line = (p: NonNullable<typeof now>) => `${Math.round(100 * p.shortShare)} % of the route short by more than ${c.report!.marginM} m, lowest ${fmt(p.lowestClearM)} m, ${fmt(p.aboveP50M)} m above plan (median), about ${Math.round(100 * p.densityFactor)} % of the planned point density`;
+  el.innerHTML = `<b>As planned now</b> (${checkFile.dsm ? `on the ${checkFile.dsmTiles} DSM tile(s) carried in the file` : 'no DSM in the file: the loaded terrain is assumed'}): ${line(now)}.<br>`
+    + `<b>With this DSM</b> (preview): ${line(next)}.<br><span style="color:var(--muted)">First-order: assumes Pilot 2 passes the change in the surface straight through to its route, as it follows the surface now. Plan on it, export the mission, and check that file before flying.</span>`;
+  $<HTMLButtonElement>('dsmSuggest').disabled = false;
+}
+$('dsmDilate').addEventListener('change', renderDsmPreview); $('dsmMargin').addEventListener('change', renderDsmPreview);
+// The least height that leaves almost none of the route short: scan the options, keep the lowest median height above plan
+// among those with at most 3 % of the route short (else the one with the least short).
+$('dsmSuggest').onclick = () => {
   const c = state.check, dem = state.dem;
-  if (!c || !dem || dem.synthetic) return;
-  const info = $('chkInfo');
-  try {
-    const aglM = chkA(), corridorM = chkC();
-    const lifted = liftRoute(c.mission.wps, dem.elev, { aglM, corridorM });
-    const route = liftedRoute(c.mission, lifted, dem.elev, corridorM);
-    const files = writeWpml(route, wpmlOptionsFor(c.mission));
-    const v = verifyRouteFiles(files.templateKml, files.waylinesWpml, { elev: dem.elev, aglM, corridorM, maxClimbMs: M400_LIMITS.climbWarnMs, maxDescentMs: M400_LIMITS.descentWarnMs, maxSpeedMs: Math.max(...lifted.map(w => w.speed)), lidar: true, brakeMs2: SAFETY.brakeMs2 });
-    c.lifted = lifted; c.liftedReport = checkClearance(lifted, dem.elev, { aglM, corridorM, marginM: 0 });
-    renderCheckMap(); renderProf();
-    if (!v.ok) {
-      $('chkLegs').innerHTML = v.issues.filter(i => i.severity === 'error').slice(0, 8).map(i => `<div class="issue error"><b>${esc(i.code)}</b><span>${esc(i.message)}</span></div>`).join('');
-      info.innerHTML += `<br><span style="color:var(--c-err)">The corrected file did not pass the independent check; nothing was exported.</span>`;
-      return;
-    }
-    const name = `${c.name}-corrected_AGL${aglM}.kmz`;
-    download(name, await writeKmz(files), 'application/vnd.google-earth.kmz');
-    info.innerHTML += `<br><span style="color:var(--c-ok)">Corrected: ${lifted.length} waypoints (${lifted.filter(w => w.inserted).length} added, ${lifted.filter(w => w.slowed).length} slowed), lowest clearance ${fmt(c.liftedReport.minClearM)} m, ${(files.durationS / 60).toFixed(1)} min at the file speeds; independent check passed → ${esc(name)}</span>`;
-  } catch (e) { info.innerHTML += `<br><span style="color:var(--c-err)">${esc((e as Error).message)}</span>`; }
+  if (!c?.report || !dem?.raster || !checkFile) return;
+  const cur = checkFile.dsm ?? dem.elev;
+  let best: { D: number; M: number; p: NonNullable<ReturnType<typeof previewDsm>> } | null = null;
+  for (const D of [0, 30, 50, 75]) for (const M of [0, 10, 20, 30, 40, 50]) {
+    const p = previewDsm(c.report, cur, surface(dem, D, M)); if (!p) continue;
+    const ok = (x: typeof p) => x.shortShare <= 0.03;
+    if (!best || (ok(p) && (!ok(best.p) || p.aboveP50M < best.p.aboveP50M)) || (!ok(best.p) && !ok(p) && p.shortShare < best.p.shortShare)) best = { D, M, p };
+  }
+  if (!best) return;
+  $<HTMLSelectElement>('dsmDilate').value = String(best.D); $<HTMLSelectElement>('dsmMargin').value = String(best.M);
+  renderDsmPreview();
 };
-// The DEM as a terrain model for Pilot 2's own terrain following: EPSG:4326 GeoTIFF, each cell the highest ground
-// within the chosen radius (the planner's corridor rule, which DJI's under-the-line follow lacks), ellipsoidal heights.
+// Export: EPSG:4326 GeoTIFF of the loaded DEM, WGS84 ellipsoidal heights (Pilot 2 reads them as ellipsoidal whatever the tags).
 $('dsmBtn').onclick = () => {
   const dem = state.dem;
   if (!dem?.raster) return;
-  const dilateM = Number($<HTMLSelectElement>('dsmDilate').value) || 0, marginM = Number($<HTMLSelectElement>('dsmMargin').value) || 0;
+  const { dilateM, marginM } = dsmChoice();
   const pts: LonLat[] = state.check ? state.check.mission.wps.map(w => [w.lon, w.lat] as LonLat) : state.aoi ? state.aoi.poly : [];
   const bbox = pts.length ? bufferedBbox(pts, Math.max(1000, dilateM + 500)) : undefined;
   try {
     const spec = dsmFromRaster(dem.raster, { dilateM, marginM, datum: 'ellipsoidal', bbox });
     const name = `dsm-${(state.check?.name ?? state.aoi?.name ?? 'dem').replace(/[^\w-]+/g, '_').slice(0, 40)}-max${dilateM}m-plus${marginM}m-ellipsoidal.tif`;
     download(name, new Uint8Array(writeGeoTiff(spec)), 'image/tiff');
-    $('demInfo').textContent = `DSM written: ${spec.width} × ${spec.height} cells, highest ground within ${dilateM} m + ${marginM} m, WGS84 ellipsoidal heights, EPSG:4326 → ${name}. Import in Pilot 2: Mapping mission → Terrain Follow → DSM file. Check the mission it produces here before flying.`;
+    $('demInfo').textContent = `DSM written: ${spec.width} × ${spec.height} cells, highest ground within ${dilateM} m + ${marginM} m, WGS84 ellipsoidal heights, EPSG:4326 → ${name}. Import in Pilot 2: Mapping mission → Terrain Follow → DSM file, plan the mission again on it, export the KMZ and drop it here to check it before flying.`;
   } catch (e) { $('demInfo').textContent = (e as Error).message; }
 };
 

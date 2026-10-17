@@ -216,6 +216,14 @@ DEM clip (AOI + buffer), offline basemap tiles.
   DSM file; DJI's built-in source is ASTER GDEM 30 m). Pilot 2's expected vertical datum is undocumented: the first
   mission made from such a DSM must be checked here before it is flown. tools/implied-dem.ts showed what FH2
   believed: 10–16 m HIGH on the flats, 12 m median / 42 m worst LOW on the koppie tops (a smoothed/coarse DEM).
+- **The checker never edits a flight plan (Luke, 17 Oct 2026)**: no corrected-KMZ export (liftRoute/liftedRoute removed).
+  It checks, previews and hands back a DSM. previewDsm (core/check.ts): first-order model, a surface change Δ under the
+  line moves the route by Δ; the current surface is the DSM carried in the KMZ (wpmz/res/dsm, ASTER tiles, WGS84
+  ellipsoidal) else the loaded DEM. Suggest = least median height above plan with ≤ 3 % of the route short.
+  AW-10 (Pilot 2 mapping, normal mode, 200 m): 35 % short; the file's rate demands are small (−2.7…+2.5 m/s at 17 m/s,
+  1 of 77 legs over the limits) so slower flying would not help: the route is smoothed (±21 m off ASTER+200 at its own
+  waypoints, straight legs cut 11 m median / 25 m max), ASTER reads 7 m low (30 max), slope beside the line 3 m (58 max).
+  Preview: GLO-30 max 75 m + 20 m → 2 % short at 88 % density. samples/aw10/RESULT-2026-10-17.txt.
 - **Operating model since 17 Oct 2026**: the web app is the Mission Checker (checker + terrain/DSM tools first; the
   route planner folded under "Plan a route here" for steep sites). Open sites: Pilot 2 mapping mission, efficiency
   mode, planner DSM (max 75 m + 40 m, ellipsoidal), mission exported and checked here before flight. No further

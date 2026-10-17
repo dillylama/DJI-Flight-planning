@@ -1,19 +1,20 @@
-// Mission checker (CLI): any DJI route KMZ (Pilot 2, FlightHub 2, this planner) against a DEM.
-//   node tools/check-kmz.ts <mission.kmz> <dem.tif> --agl 320 [--corridor 75] [--margin 10] [--step 10]
-//                           [--takeoff lat,lon] [--lift out.kmz] [--dsm out.tif [--dilate 75] [--dsm-margin 0] [--dsm-datum ellipsoidal|orthometric]]
-// Reports, per leg, the lowest clearance over the ground directly under the line and over the highest ground within
-// ±corridor, against the AGL the mission was planned for; --lift writes a corrected KMZ (heights raised, waypoints
-// inserted, speeds by the measured aircraft model, this planner's file layout); --dsm writes the DEM as a terrain
-// model for Pilot 2's own terrain following (EPSG:4326 GeoTIFF, corridor-dilated). Prints no coordinates.
+// Mission checker (CLI): any DJI route KMZ (Pilot 2, FlightHub 2, this planner) against a DEM. Never edits the route.
+//   node tools/check-kmz.ts <mission.kmz> <dem.tif> --agl 320 [--corridor 75] [--margin 10] [--step 10] [--takeoff lat,lon]
+//                           [--dsm out.tif [--dilate 75] [--dsm-margin 40]] [--table]
+// Reports, per leg, the lowest clearance over the ground under the line and over the highest ground within ±corridor,
+// against the AGL the mission was planned for, and how far above plan it flies (point density). --table previews the
+// dilation × margin options of a DSM for Pilot 2's terrain following against this route (first-order: Pilot 2 passes
+// the surface change straight through); --dsm writes one (EPSG:4326 GeoTIFF, WGS84 ellipsoidal heights). Prints no
+// coordinates.
 import { readFileSync, writeFileSync } from 'node:fs';
 import JSZip from 'jszip';
-import { readGeoTiff, rasterElev, readMissionFiles, checkClearance, liftRoute, liftedRoute, wpmlOptionsFor, writeWpml, writeKmz, dsmFromRaster, writeGeoTiff, verifyRouteFiles, bufferedBbox } from '../packages/core/src/index.ts';
+import { readGeoTiff, rasterElev, readMissionFiles, checkClearance, previewDsm, embeddedDsm, dsmFromRaster, writeGeoTiff, bufferedBbox, type Raster } from '../packages/core/src/index.ts';
 
 const args = process.argv.slice(2);
 const flag = (name: string, d?: string) => { const i = args.indexOf('--' + name); return i >= 0 ? args.splice(i, 2)[1] : d; };
 const agl = +flag('agl', 'NaN')!, corridor = +flag('corridor', '75')!, margin = +flag('margin', '10')!, step = +flag('step', '10')!;
-const takeoff = flag('takeoff'), lift = flag('lift'), dsm = flag('dsm'), dilate = +flag('dilate', '75')!, dsmMargin = +flag('dsm-margin', '0')!, dsmDatum = flag('dsm-datum', 'ellipsoidal') as 'ellipsoidal' | 'orthometric';
-const [kmzPath, demPath] = args;
+const takeoff = flag('takeoff'), dsm = flag('dsm'), table = args.includes('--table'), dilate = +flag('dilate', '75')!, dsmMargin = +flag('dsm-margin', '40')!, dsmDatum = flag('dsm-datum', 'ellipsoidal') as 'ellipsoidal' | 'orthometric';
+const [kmzPath, demPath] = args.filter(x => x !== '--table');
 if (!kmzPath || !demPath || !Number.isFinite(agl)) { console.error('usage: node tools/check-kmz.ts <mission.kmz> <dem.tif> --agl 320 [--corridor 75] [--margin 10] [--takeoff lat,lon] [--lift out.kmz] [--dsm out.tif]'); process.exit(2); }
 
 const zip = await JSZip.loadAsync(readFileSync(kmzPath));
@@ -42,14 +43,15 @@ for (const l of shortLegs.slice(0, 15)) console.log(`    leg ${String(l.leg + 1)
 if (shortLegs.length > 15) console.log(`    … ${shortLegs.length - 15} more`);
 console.log(rep.nShort ? '\nRESULT: the file does NOT hold its planned clearance over this DEM.' : '\nRESULT: the file holds its planned clearance over this DEM.');
 
-if (lift) {
-  const up = liftRoute(m.wps, elev, { aglM: agl, corridorM: corridor, stepM: step });
-  const rep2 = checkClearance(up, elev, { aglM: agl, corridorM: corridor, marginM: 0, stepM: step });
-  const route = liftedRoute(m, up, elev, corridor);
-  const files = writeWpml(route, wpmlOptionsFor(m));
-  const v = verifyRouteFiles(files.templateKml, files.waylinesWpml, { elev, aglM: agl, corridorM: corridor, maxClimbMs: 3.5, maxDescentMs: 2.5, maxSpeedMs: Math.max(...up.map(w => w.speed)), lidar: true });
-  writeFileSync(lift, await writeKmz(files));
-  console.log(`\nlifted: ${up.length} waypoints (${up.filter(w => w.inserted).length} inserted, ${up.filter(w => w.slowed).length} slowed), lowest corridor clearance now ${f1(rep2.minClearM)} m, ${(files.durationS / 60).toFixed(1)} min at the file speeds → ${lift}${v.ok ? ' (independent check passed)' : ` (independent check: ${v.issues.filter(i => i.severity === 'error').map(i => i.code).join(', ') || 'warnings only'})`}`);
+const dsmTiles = Object.keys(zip.files).filter(n => /res\/dsm\/.*\.tiff?$/i.test(n));
+const current = (await embeddedDsm(await Promise.all(dsmTiles.map(n => zip.files[n].async('arraybuffer'))))) ?? elev;
+console.log(`  the mission was planned on ${dsmTiles.length ? `the ${dsmTiles.length} DSM tile(s) inside the file (${dsmTiles.map(n => n.split('/').pop()).join(', ')})` : 'no DSM carried in the file: the preview assumes the DEM given'}`);
+const asRaster = (s: ReturnType<typeof dsmFromRaster>): Raster => ({ width: s.width, height: s.height, west: s.tie[0], north: s.tie[1], dLon: s.pixel[0], dLat: s.pixel[1], data: s.values, nodata: s.nodata ?? null, pixelIsPoint: false });
+const row = (label: string, p: NonNullable<ReturnType<typeof previewDsm>>) => console.log(`  ${label.padEnd(34)} short ${(100 * p.shortShare).toFixed(0).padStart(3)} % of the route, lowest ${p.lowestClearM.toFixed(0).padStart(4)} m, above plan ${p.aboveP50M.toFixed(0).padStart(3)} m median / ${p.aboveP95M.toFixed(0)} m 95 %, density ${(100 * p.densityFactor).toFixed(0)} %`);
+if (table) {
+  console.log('\nDSM options (preview, first-order):');
+  row('as planned now', previewDsm(rep, current, current)!);
+  for (const D of [0, 30, 50, 75]) for (const M of [0, 20, 40]) row(`DEM max ${D} m + ${M} m`, previewDsm(rep, current, rasterElev(asRaster(dsmFromRaster(raster, { dilateM: D, marginM: M, datum: 'orthometric' }))))!);
 }
 if (dsm) {
   const b = bufferedBbox(m.wps.map(w => [w.lon, w.lat] as [number, number]), Math.max(500, corridor + 300));

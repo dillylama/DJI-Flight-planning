@@ -2,8 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { egm96ToEllipsoid, ellipsoidToEgm96 } from 'egm96-universal';
 import {
-  rasterElev, readGeoTiff, readMissionFiles, checkClearance, liftRoute, liftedRoute, wpmlOptionsFor, writeWpml, dsmFromRaster, writeGeoTiff,
-  parseRouteFile, type Raster,
+  rasterElev, readGeoTiff, readMissionFiles, checkClearance, previewDsm, compositeElev, embeddedDsm, dsmFromRaster, writeGeoTiff, type Raster,
 } from '../src/index.ts';
 
 // A 2 km × 1 km raster of 30 m cells (0.00027°): flat at 700 m with a 60 m koppie in the middle of the route.
@@ -15,6 +14,7 @@ for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
 }
 const r: Raster = { width: W, height: H, west, north, dLon: d, dLat: d, data, nodata: -9999, pixelIsPoint: false };
 const elev = rasterElev(r);
+const asRaster = (s: ReturnType<typeof dsmFromRaster>): Raster => ({ width: s.width, height: s.height, west: s.tie[0], north: s.tie[1], dLon: s.pixel[0], dLat: s.pixel[1], data: s.values, nodata: s.nodata ?? null, pixelIsPoint: false });
 const lat = north - 20.5 * d;   // the line runs east–west through the koppie's centre
 
 const pm = (i: number, lon: number, hEll: number, speed = 15) => `
@@ -79,41 +79,29 @@ test('checkClearance finds the koppie under a level leg; the planner-style corri
   assert.ok(Math.abs(rep.lengthM - 60 * d * 111320 * Math.cos(lat * Math.PI / 180)) < 10);
 });
 
-test('liftRoute clears the koppie with inserted waypoints and slows the climb', () => {
+test('previewDsm: a dilated surface with a margin lifts the route over the koppie; the current surface changes nothing', () => {
   const m = readMissionFiles(flatFile, null);
-  const up = liftRoute(m.wps, elev, { aglM: 120, corridorM: 75 });
-  assert.ok(up.length > 3, `inserted ${up.length - 2}`);
-  assert.ok(up.some(w => w.inserted));
-  const rep = checkClearance(up, elev, { aglM: 120, corridorM: 75, marginM: 0 });
-  assert.equal(rep.nShort, 0, `lifted route still short: ${rep.minClearM}`);
-  assert.ok(rep.minClearM >= 120 - 1.5, `min clearance ${rep.minClearM}`);
-  assert.ok(up.some(w => w.slowed), 'the climb onto the koppie must be slowed');
-  // and it hugs terrain + AGL: never more than the thinning tolerance above the requirement (corridor max, looking one
-  // corridor width ahead and behind along the track, as the planner and the verifier do) — no long shallow ramp
-  const need = (k: number) => Math.max(...rep.stations.filter(t => Math.abs(t.s - rep.stations[k].s) <= 75 + 2 * 50 /* ext (corridor) + a dense leg each side */).map(t => t.corridor)) + 120;
-  const excess = Math.max(...rep.stations.map((s, k) => s.h - need(k)));
-  assert.ok(excess <= 10 + 1, `excess ${excess}`);
-  // (a level leg well inside the raster, 12 cells north of the koppie: the corridor and its extension must stay on data)
-  const flat = liftRoute(readMissionFiles(waylines('WGS84', pm(0, west + 10 * d, egm96ToEllipsoid(lat, west + 10 * d, 830)) + pm(1, west + 24 * d, egm96ToEllipsoid(lat, west + 24 * d, 830))), null).wps, elev, { aglM: 120, corridorM: 75 });
-  assert.equal(flat.length, 2, 'a level leg over level ground gets no waypoints');
-  // ends untouched, heights monotone up then down over the hill
-  assert.equal(up[0].src, 0); assert.equal(up[up.length - 1].src, 1);
-  const top = Math.max(...up.map(w => w.h));
-  assert.ok(top >= 880 - 1 && top <= 882, `top ${top}`);
+  const rep = checkClearance(m.wps, elev, { aglM: 120, corridorM: 75 });
+  const same = previewDsm(rep, elev, elev)!;
+  assert.ok(Math.abs(same.shortShare - rep.nShort / rep.legs.length) < 1 || same.shortShare > 0, 'the koppie is short as flown');
+  assert.ok(Math.abs(same.lowestClearM - rep.minClearM) < 0.01);
+  const surf = (dilateM: number, marginM: number) => rasterElev(asRaster(dsmFromRaster(r, { dilateM, marginM, datum: 'orthometric' })));
+  const bare = previewDsm(rep, elev, surf(0, 0))!, dil = previewDsm(rep, elev, surf(75, 0))!, withM = previewDsm(rep, elev, surf(75, 20))!;
+  assert.ok(Math.abs(bare.lowestClearM - same.lowestClearM) < 0.5, 'bare DEM is the current surface');
+  assert.ok(dil.shortShare < same.shortShare - 0.02, `dilation lifts the flanks: ${same.shortShare} → ${dil.shortShare} of the route short`);   // the peak itself is already at the ground's top, so the low point stays
+  assert.ok(withM.lowestClearM > dil.lowestClearM + 15 && withM.aboveP50M > dil.aboveP50M, 'margin costs height');
+  assert.ok(withM.densityFactor <= dil.densityFactor);
 });
 
-test('liftedRoute + wpmlOptionsFor write a Pilot 2 file that re-reads with the lifted heights', () => {
-  const m = readMissionFiles(flatFile, template('mapping2d'));
-  const up = liftRoute(m.wps, elev, { aglM: 120, corridorM: 75 });
-  const route = liftedRoute(m, up, elev, 75);
-  const files = writeWpml(route, wpmlOptionsFor(m));
-  const back = parseRouteFile(files.waylinesWpml, 'waylines');
-  assert.equal(back.waypoints.length, up.length);
-  assert.ok(Math.abs(back.waypoints[0].hEgm96 - up[0].h) < 0.05);
-  assert.equal(back.exitOnRCLost, 'goContinue');
-  assert.ok(/samplingRate>100000</.test(files.templateKml));
-  assert.ok(/modelColoringEnable>0</.test(files.templateKml));
-  assert.ok(back.waypoints[0].groups.some(g => g.actions.some(a => a.params.recordPointCloudOperate === 'startRecord')));
+test('compositeElev takes the first surface with data; embeddedDsm reads DJI-style ellipsoidal tiles back as sea-level heights', async () => {
+  const a = rasterElev({ width: 3, height: 3, west: 10, north: 5, dLon: 0.001, dLat: 0.001, data: [1, 1, 1, 1, 1, 1, 1, 1, 1], nodata: -9999, pixelIsPoint: false });
+  const b = rasterElev({ width: 3, height: 3, west: 20, north: 5, dLon: 0.001, dLat: 0.001, data: [2, 2, 2, 2, 2, 2, 2, 2, 2], nodata: -9999, pixelIsPoint: false });
+  const c = compositeElev([a, b]);
+  assert.equal(c(10.0015, 4.9985), 1); assert.equal(c(20.0015, 4.9985), 2); assert.equal(c(30, 30), null);
+  const spec = dsmFromRaster(r, { dilateM: 0, marginM: 0, datum: 'ellipsoidal' });
+  const dsm = (await embeddedDsm([writeGeoTiff(spec), new ArrayBuffer(8)]))!;   // the second "tile" is garbage and is skipped
+  assert.ok(Math.abs(dsm(west + 5.5 * d, lat)! - 700) < 0.1);
+  assert.equal(await embeddedDsm([]), null);
 });
 
 test('dsmFromRaster: dilation puts the planner corridor into the surface, heights become ellipsoidal, round trip', async () => {

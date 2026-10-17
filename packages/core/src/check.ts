@@ -7,19 +7,14 @@
 //                      height mode the file uses (WGS84 ellipsoidal, EGM96, or relative to the take-off point).
 //   checkClearance     every leg sampled against the DEM: clearance over the ground under the line and over the
 //                      highest ground in the ±corridor, against the AGL the mission was planned for.
-//   liftRoute          the same waypoints with heights raised, waypoints inserted where a straight leg would still
-//                      be short, and speeds capped with the measured climb/descent/braking model, ready for writeWpml.
-// Nothing here prints coordinates.
+//   previewDsm         what a different terrain model (see geotiff-write.ts dsmFromRaster) would do to the same route.
+// This module never writes or edits a route: the flight plan is Pilot 2's / FlightHub 2's own (Luke, 17 Oct 2026);
+// the only thing the checker hands back is a better surface for them to plan on. Nothing here prints coordinates.
 import { ellipsoidToEgm96 } from 'egm96-universal';
 import { makeProj, dist, type XY } from './geo.ts';
-import { type ElevFn, corridorProfile, corridorMax, type Station } from './terrain.ts';
+import { type ElevFn, corridorProfile, type Station } from './terrain.ts';
 import { parseRouteFile, type ParsedRoute, type FileGroup } from './verify.ts';
-import { STOP_TURN, type Route, type TurnMode } from './route.ts';
-import type { FlightWp } from './heights.ts';
-import { DEFAULTS } from './plan.ts';
-import { SAFETY } from './safety.ts';
-import type { WpmlOptions } from './wpml.ts';
-import { L3_WPML } from './wpml.ts';
+import { readGeoTiff, rasterElev } from './dem.ts';
 
 export interface CheckWp {
   src: number;              // index in the file this waypoint came from (inserted waypoints: the leg's start)
@@ -27,9 +22,6 @@ export interface CheckWp {
   h: number;                // height above mean sea level (EGM96)
   speed: number;            // DJI waypointSpeed: speed from here to the next waypoint
   turnMode: string; damping: number;
-  inserted?: boolean;
-  slowed?: boolean;
-  speed0?: number;          // the file's speed before the lift's speed rule (so repeated passes start from it)
 }
 
 export interface MissionFile {
@@ -159,123 +151,45 @@ export function checkClearance(wps: CheckWp[], elev: ElevFn, o: CheckOptions): C
     aboveM, densityFactor: o.aglM / Math.max(1, o.aglM + Math.max(0, aboveM.p50)) };
 }
 
-// Heights rebuilt to the planned AGL over the DEM, the planner's own way (heights.ts): dense vertices every
-// `spacingM` along each leg plus the file's waypoints; each vertex AGL above the highest ground in the corridors of
-// its two dense legs, every leg extended `ext` beyond both ends (the ground under a turn, and the stopping
-// distance), so every leg clears by construction; then thinned: a vertex is dropped when the straight line between
-// its neighbours stays between the dense heights and dense + excessM (the planner's thinning tolerance), so the
-// route hugs terrain + AGL without a waypoint at every DEM cell. Speeds: the measured aircraft model (climb 3.5 /
-// descent 2.5 m/s, braking 2 m/s² into a slower leg). The file's own heights are replaced; with keepHigher a file
-// waypoint above the requirement keeps its height (a deliberate climb over an obstacle).
-export interface LiftOptions extends CheckOptions { spacingM?: number; excessM?: number; keepHigher?: boolean; climbMs?: number; descentMs?: number; brakeMs2?: number }
-export function liftRoute(wps: CheckWp[], elev: ElevFn, o: LiftOptions): CheckWp[] {
-  if (wps.length < 2) throw new Error('A route needs at least 2 waypoints.');
-  const spacing = o.spacingM ?? 50, excess = o.excessM ?? DEFAULTS.thinToleranceM, stepM = o.stepM ?? 10;
-  const climb = o.climbMs ?? DEFAULTS.climbMs, desc = o.descentMs ?? DEFAULTS.descentMs, brake = o.brakeMs2 ?? SAFETY.brakeMs2;
-  const proj = makeProj(wps[0].lat, wps[0].lon);
-  const vTop = Math.max(...wps.map(w => w.speed));
-  const ext = Math.max(o.corridorM, (vTop * vTop) / (2 * brake));
-  // 1. dense vertices
-  type V = CheckWp & { xy: XY; orig: boolean };
-  const dense: V[] = [];
-  for (let i = 0; i < wps.length - 1; i++) {
-    const a = wps[i], b = wps[i + 1], A = proj.fwd(a.lon, a.lat), B = proj.fwd(b.lon, b.lat), L = dist(A, B);
-    const n = Math.max(1, Math.ceil(L / spacing));
-    for (let k = 0; k < n; k++) {
-      if (k === 0) { dense.push({ ...a, xy: A, orig: true, speed: a.speed0 ?? a.speed, speed0: a.speed0 ?? a.speed, slowed: false }); continue; }
-      const xy: XY = [A[0] + ((B[0] - A[0]) * k) / n, A[1] + ((B[1] - A[1]) * k) / n];
-      const [lon, lat] = proj.inv(xy[0], xy[1]);
-      dense.push({ src: a.src, lon, lat, h: NaN, speed: a.speed0 ?? a.speed, speed0: a.speed0 ?? a.speed, turnMode: 'toPointAndPassWithContinuityCurvature', damping: a.damping, inserted: true, xy, orig: false });
-    }
+// ── What would a different DSM do to this mission? (a preview, never an edit of the route) ─────────────────────
+// Pilot 2 builds the route from the terrain model it is given. First-order model: where the surface under the line
+// changes by Δ, the route changes by Δ there, and keeps whatever it already does on top of the surface (its straight
+// legs between waypoints, its smoothing). So a new surface `next` moves the stations of the check by
+// next − current, and the clearance is measured again against the same corridor rule. `current` is the surface the
+// mission was planned on (the DSM carried in the KMZ when there is one, else the DEM itself). It is a preview: the
+// mission Pilot 2 makes from the new surface must be exported and checked again before it is flown.
+export interface DsmPreview {
+  shortShare: number;       // share of the route more than marginM short of the corridor + AGL
+  lowestClearM: number;     // lowest height over the corridor ground
+  aboveP50M: number; aboveP95M: number;   // height above corridor + AGL
+  densityFactor: number;
+}
+export function previewDsm(report: CheckReport, current: ElevFn, next: ElevFn): DsmPreview | null {
+  const ex: number[] = []; let short = 0, low = Infinity, n = 0;
+  for (const s of report.stations) {
+    const a = current(s.lon, s.lat), b = next(s.lon, s.lat);
+    if (a == null || b == null) continue;
+    const h = s.h + (b - a), clear = h - s.corridor;
+    n++; if (clear < low) low = clear;
+    if (clear < report.aglM - report.marginM) short++;
+    ex.push(clear - report.aglM);
   }
-  const last = wps[wps.length - 1];
-  dense.push({ ...last, xy: proj.fwd(last.lon, last.lat), orig: true, speed: last.speed0 ?? last.speed, speed0: last.speed0 ?? last.speed, slowed: false });
-  // 2. heights: AGL over the corridor max of both adjacent dense legs (each extended by ext)
-  const legMax = dense.slice(0, -1).map((v, i) => corridorMax(elev, proj, v.xy, dense[i + 1].xy, o.corridorM, ext, stepM));
-  const req = dense.map((_, i) => Math.max(i > 0 ? legMax[i - 1] : -Infinity, i < legMax.length ? legMax[i] : -Infinity) + o.aglM);
-  dense.forEach((v, i) => { v.h = o.keepHigher && v.orig && Number.isFinite(wps.find(w => w.src === v.src)?.h ?? NaN) ? Math.max(req[i], wps.find(w => w.src === v.src)!.h) : req[i]; });
-  // 3. thinning: keep the file's waypoints; drop dense vertices while the straight line stays within [dense, dense + excess]
-  const s = dense.map((v, i) => (i === 0 ? 0 : dist(dense[i - 1].xy, v.xy)));
-  for (let i = 1; i < s.length; i++) s[i] += s[i - 1];
-  const keep: number[] = [0];
-  let k0 = 0;
-  while (k0 < dense.length - 1) {
-    let k1 = k0 + 1;
-    for (let k = k0 + 2; k < dense.length; k++) {
-      let ok = true;
-      for (let j = k0 + 1; j < k && ok; j++) {
-        const f = (s[j] - s[k0]) / Math.max(1e-9, s[k] - s[k0]), h = dense[k0].h + f * (dense[k].h - dense[k0].h);
-        if (h < dense[j].h - 0.02 || h > dense[j].h + excess) ok = false;
-      }
-      if (!ok) break;
-      k1 = k;
-      if (dense[k].orig) break;   // the file's own waypoints always stay
-    }
-    keep.push(k1); k0 = k1;
-  }
-  const out: CheckWp[] = keep.map(i => { const { xy: _xy, orig: _o, ...w } = dense[i]; return w; });
-  // 4. dampings inside the legs, speeds by the measured model
-  const xy = keep.map(i => dense[i].xy);
-  const D = xy.slice(0, -1).map((p, i) => dist(p, xy[i + 1]));
-  for (let i = 0; i < out.length; i++) {
-    const minLeg = Math.min(i > 0 ? D[i - 1] : Infinity, i < D.length ? D[i] : Infinity);
-    if (out[i].turnMode !== STOP_TURN && Number.isFinite(minLeg)) out[i].damping = Math.max(1, Math.min(out[i].damping || 1, 0.45 * minLeg));
-  }
-  // 1 % under the rate limits: the independent check measures leg lengths with its own distance model
-  const lim = D.map((d, i) => {
-    const dh = out[i + 1].h - out[i].h;
-    const vRate = dh > 0 ? (0.99 * climb * d) / dh : dh < 0 ? (0.99 * desc * d) / -dh : Infinity;
-    return Math.min(out[i].speed, vRate);
-  });
-  const floor1 = (v: number) => Math.max(1, Math.floor(v * 10 + 1e-9) / 10);   // written to 0.1 m/s, never rounded up
-  const cap = new Array<number>(D.length);
-  for (let i = D.length - 1; i >= 0; i--) cap[i] = floor1(Math.min(lim[i], i < D.length - 1 ? Math.sqrt(cap[i + 1] ** 2 + 2 * brake * D[i]) : Infinity));
-  for (let i = 0; i < D.length; i++) {
-    if (cap[i] < out[i].speed - 0.05) { out[i].slowed = true; out[i].speed = cap[i]; }
-  }
-  return out;
+  if (!n) return null;
+  ex.sort((x, y) => x - y);
+  const q = (p: number) => ex[Math.floor(p * (ex.length - 1))];
+  return { shortShare: short / n, lowestClearM: low, aboveP50M: q(0.5), aboveP95M: q(0.95), densityFactor: report.aglM / Math.max(1, report.aglM + Math.max(0, q(0.5))) };
 }
 
-// The lifted waypoints as a route for writeWpml (this planner's own, proven file layout): one data line, recording
-// from the file's start-record waypoint to its stop-record waypoint (or first to last), the file's speeds and turn
-// modes. FlightHub 2 / Pilot 2 pause–resume actions between lines are not carried over: recording runs through.
-export function liftedRoute(mission: MissionFile, wps: CheckWp[], elev: ElevFn, corridorM: number): Route<FlightWp> {
-  const proj = makeProj(wps[0].lat, wps[0].lon);
-  const up = elev.upper ?? elev;
-  const startSrc = mission.recordStart ?? 0, stopSrc = mission.recordStop ?? mission.wps.length - 1;
-  const firstOf = (src: number) => wps.findIndex(w => w.src === src && !w.inserted);
-  let iStart = firstOf(startSrc), iStop = firstOf(stopSrc);
-  if (iStart < 0) iStart = 0; if (iStop < 0 || iStop <= iStart) iStop = wps.length - 1;
-  const turn = (m: string): TurnMode => /Stop/.test(m) ? STOP_TURN : m === 'coordinateTurn' ? 'coordinateTurn' : 'toPointAndPassWithContinuityCurvature';
-  const out: FlightWp[] = wps.map((w, i) => {
-    const xy = proj.fwd(w.lon, w.lat);
-    const ground = up(w.lon, w.lat) ?? w.h;
-    const A = i > 0 ? proj.fwd(wps[i - 1].lon, wps[i - 1].lat) : xy, B = i < wps.length - 1 ? proj.fwd(wps[i + 1].lon, wps[i + 1].lat) : xy;
-    const tm = Math.max(...corridorProfile(elev, proj, A, xy, corridorM, 10).map(s => s.max), ...corridorProfile(elev, proj, xy, B, corridorM, 10).map(s => s.max));
-    return {
-      xy, lon: w.lon, lat: w.lat, h: w.h, speed: w.speed, role: 'line', line: 0, actions: [...(i === iStart ? ['START_RECORD' as const] : []), ...(i === iStop ? ['STOP_RECORD' as const] : [])],
-      dampingM: i === 0 || i === wps.length - 1 ? 0 : Math.max(1, w.damping), turnMode: i === 0 || i === wps.length - 1 ? STOP_TURN : turn(w.turnMode),
-      terrainMax: tm, terrainUnderWp: ground, slowed: w.slowed, roundingM: 0, lagM: 0, turnM: 0,
-    };
-  });
-  return { wps: out, startIdx: 0, fig8RadiusM: 0, speedMs: Math.max(...out.map(w => w.speed)) };
+// The first surface in the list that has data at the point (a mission can carry several DSM tiles).
+export function compositeElev(list: ElevFn[]): ElevFn {
+  return (lon, lat) => { for (const e of list) { const v = e(lon, lat); if (v != null && Number.isFinite(v)) return v; } return null; };
 }
 
-// writeWpml options that keep the mission's own settings (take-off, signal loss, L3 parameters, calibration, photos).
-export function wpmlOptionsFor(mission: MissionFile): WpmlOptions {
-  const w = mission.waylines;
-  const lidar = mission.lidar && (L3_WPML.returnModes as readonly string[]).includes(mission.lidar.returnMode) && (L3_WPML.scanningModes as readonly string[]).includes(mission.lidar.scanningMode)
-    && (L3_WPML.samplingRates as readonly number[]).includes(mission.lidar.samplingRate)
-    ? { samplingRate: mission.lidar.samplingRate, returnMode: mission.lidar.returnMode as typeof L3_WPML.returnModes[number], scanningMode: mission.lidar.scanningMode as typeof L3_WPML.scanningModes[number], modelColoring: false }
-    : null;
-  const takeoff: WpmlOptions['takeoff'] = { flyToMode: w.flyToWaylineMode === 'safely' ? 'safely' : 'pointToPoint', rcLost: w.exitOnRCLost === 'goContinue' ? 'continue' : 'goBack' };
-  if (Number.isFinite(w.takeOffSecurityHeight) && w.takeOffSecurityHeight >= 1.2) takeoff.takeoffSecurityM = w.takeOffSecurityHeight;
-  if (Number.isFinite(w.transitSpeed) && w.transitSpeed > 0) takeoff.transitSpeedMs = w.transitSpeed;
-  return {
-    takeoff,
-    payloadPositionIndex: Number.isFinite(w.payloadPosition) ? w.payloadPosition : 0,
-    lidar,
-    djiImuCalibration: mission.imuCalibration,
-    rgbPhotoSpacingM: mission.rgbSpacingM,
-  };
+// The terrain model(s) carried inside a mission KMZ (wpmz/res/dsm/*.tif: the ASTER tiles Pilot 2 planned on, or a DSM
+// the user imported). DJI stores them as WGS84 ellipsoidal heights ("wgs84_" in the file name), so they are read as
+// ellipsoidal and come back as heights above mean sea level, like every other surface here. Unreadable tiles are skipped.
+export async function embeddedDsm(tiles: ArrayBuffer[]): Promise<ElevFn | null> {
+  const list: ElevFn[] = [];
+  for (const b of tiles) { try { list.push(rasterElev(await readGeoTiff(b, { verticalDatum: 'ellipsoidal' }))); } catch { /* skip */ } }
+  return list.length ? compositeElev(list) : null;
 }

@@ -16,9 +16,9 @@ our own RC app (*3DM Fly*, DJI Mobile SDK v5) or by injecting the route into DJI
 
 The web app is a **mission checker** first: drop a Pilot 2 / FlightHub 2 / planner KMZ and every leg is measured
 against the terrain (GLO-30 or your own GeoTIFF), under the line and across a lateral corridor, against the AGL it
-was planned for; short legs are listed, drawn and profiled. From the same page: a corrected KMZ with the planner's
-heights and speed rule (only after the independent file check passes), and a **DSM export** for Pilot 2's own terrain
-following (EPSG:4326, highest ground within 75 m + 40 m margin, ellipsoidal). The route planner itself is still there
+was planned for; short legs are listed, drawn and profiled. It never edits the route. What it hands back is a better
+terrain model: a **DSM for Pilot 2's own terrain following** (EPSG:4326, ellipsoidal) with a preview of what each
+dilation and margin would do to the route you loaded, and a Suggest button. The route planner itself is still there
 under "Plan a route here", for steep sites. Why: measured on 15–17 Oct 2026, DJI's built-in elevation data flew the
 M400 45 m low under the line and 74 m low beside it over hills; a DSM from here brought that to 10–19 m, and Pilot 2's
 own "efficiency" mode removed the stop-start at turns, so the everyday workflow is Pilot 2 + this checker.
