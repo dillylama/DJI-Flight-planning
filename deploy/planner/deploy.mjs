@@ -20,6 +20,17 @@ await build({
 });
 // Only /api/* wakes the worker; everything else is served straight from static assets.
 writeFileSync(dist + '/_routes.json', JSON.stringify({ version: 1, include: ['/api/*'], exclude: [] }));
+// Security headers for the static files: HTTPS only, no framing by other sites, no referrer leaks.
+// (No content policy: MapLibre, terrain and tile sources vary too much to pin down safely.)
+writeFileSync(dist + '/_headers', [
+  '/*',
+  '  Strict-Transport-Security: max-age=31536000; includeSubDomains',
+  '  X-Frame-Options: SAMEORIGIN',
+  "  Content-Security-Policy: frame-ancestors 'self'",
+  '  Referrer-Policy: strict-origin-when-cross-origin',
+  '  Permissions-Policy: camera=(), microphone=(), payment=(), usb=(), geolocation=(self)',
+  '',
+].join('\n'));
 mkdirSync(dist, { recursive: true });
 console.log('built', dist);
 
